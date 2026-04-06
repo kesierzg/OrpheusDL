@@ -246,7 +246,8 @@ class Orpheus:
                             file_type = ImageFileTypeEnum[covers_settings.get('external_format', 'png')],
                             resolution = covers_settings.get('main_resolution', 1400),
                             compression = CoverCompressionEnum[covers_settings.get('main_compression', 'high')]
-                        )
+                        ),
+                        play_sound_on_finish = general_settings.get('play_sound_on_finish', True)
                     ),
                     gui_handlers = self.gui_handlers,
                     progress_bar_enabled = general_settings.get('progress_bar', True)

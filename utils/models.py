@@ -241,6 +241,7 @@ class OrpheusOptions:
     disable_subscription_check: bool
     quality_tier: QualityEnum  # Here because of subscription checking
     default_cover_options: CoverOptions
+    play_sound_on_finish: bool = True
 
 
 @dataclass
