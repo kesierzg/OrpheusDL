@@ -66,7 +66,7 @@ def _resize_image_if_needed(image_path: str, max_size_bytes: int = 16 * 1024 * 1
         return image_path
 
 
-def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_list: list, embedded_lyrics: str, container: ContainerEnum):
+def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_list: list, embedded_lyrics: str, container: ContainerEnum, metadata_separator: str = ';', split_metadata: bool = True):
     if container == ContainerEnum.flac:
         tagger = FLAC(file_path)
     elif container == ContainerEnum.opus:
@@ -120,7 +120,10 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
     if track_info.album: tagger['album'] = track_info.album
     if track_info.tags.album_artist: tagger['albumartist'] = track_info.tags.album_artist
 
-    tagger['artist'] = track_info.artists
+    if split_metadata:
+        tagger['artist'] = track_info.artists if isinstance(track_info.artists, list) else [track_info.artists]
+    else:
+        tagger['artist'] = metadata_separator.join(track_info.artists) if isinstance(track_info.artists, list) else track_info.artists
 
     if container == ContainerEnum.m4a or container == ContainerEnum.mp3:
         if track_info.tags.track_number and track_info.tags.total_tracks:
@@ -161,7 +164,11 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         else:
             tagger['Rating'] = 'Explicit' if track_info.explicit else 'Clean'
 
-    if track_info.tags.genres: tagger['genre'] = track_info.tags.genres
+    if track_info.tags.genres: 
+        if split_metadata:
+            tagger['genre'] = track_info.tags.genres if isinstance(track_info.tags.genres, list) else [track_info.tags.genres]
+        else:
+            tagger['genre'] = metadata_separator.join(track_info.tags.genres) if isinstance(track_info.tags.genres, list) else track_info.tags.genres
     if track_info.tags.isrc:
         if container == ContainerEnum.m4a:
             tagger['isrc'] = track_info.tags.isrc.encode()
@@ -182,9 +189,10 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
     if track_info.tags.label:
         if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.webm}:
             # Use list-style assignment for maximum VorbisComment compatibility
-            tagger['LABEL'] = [track_info.tags.label]
-            tagger['PUBLISHER'] = [track_info.tags.label]
-            tagger['ORGANIZATION'] = [track_info.tags.label]
+            # However, if it's a list, join it with separator if it's not the label itself
+            tagger['LABEL'] = track_info.tags.label
+            tagger['PUBLISHER'] = track_info.tags.label
+            tagger['ORGANIZATION'] = track_info.tags.label
         elif container == ContainerEnum.mp3:
             tagger.tags._EasyID3__id3._DictProxy__dict['TPUB'] = TPUB(
                 encoding=3,
@@ -223,22 +231,37 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
             tagger.RegisterTextKey(key, '----:com.apple.itunes:' + key)
             tagger[key] = str(value).encode()
 
-    # Need to change to merge duplicate credits automatically, or switch to plain dicts instead of list[dataclass]
+    # Group and merge duplicate credits automatically
     if credits_list:
+        grouped_credits = {}
+        for credit in credits_list:
+            credit_type = credit.type.lower()
+            if credit_type not in grouped_credits:
+                grouped_credits[credit_type] = []
+            grouped_credits[credit_type].extend(credit.names)
+
         if container == ContainerEnum.m4a:
-            for credit in credits_list:
-                # Create a new freeform atom and set the contributors in bytes
-                tagger.RegisterTextKey(credit.type, '----:com.apple.itunes:' + credit.type)
-                tagger[credit.type] = [con.encode() for con in credit.names]
+            for credit_type, names in grouped_credits.items():
+                tagger.RegisterTextKey(credit_type, '----:com.apple.itunes:' + credit_type)
+                if split_metadata:
+                    tagger[credit_type] = [name.encode() for name in names]
+                else:
+                    tagger[credit_type] = [metadata_separator.join(names).encode()]
         elif container == ContainerEnum.mp3:
-            for credit in credits_list:
-                # Create a new user-defined text frame key
-                tagger.tags.RegisterTXXXKey(credit.type.upper(), credit.type)
-                tagger[credit.type] = credit.names
+            for credit_type, names in grouped_credits.items():
+                tagger.tags.RegisterTXXXKey(credit_type.upper(), credit_type)
+                if split_metadata:
+                    # EasyID3 handles multiple values by passing them as a list
+                    tagger[credit_type] = names
+                else:
+                    tagger[credit_type] = metadata_separator.join(names)
         else:
-            for credit in credits_list:
+            for credit_type, names in grouped_credits.items():
                 try:
-                    tagger.tags[credit.type] = credit.names
+                    if split_metadata:
+                        tagger.tags[credit_type] = names
+                    else:
+                        tagger.tags[credit_type] = metadata_separator.join(names)
                 except:
                     pass
 

@@ -512,7 +512,8 @@ class Downloader:
                         return self.service.get_track_info(track_id, quality_tier, codec_options, **args.get('extra_kwargs', {}))
                     
                     track_info = await loop.run_in_executor(None, get_track_info_wrapper)
-                    track_name = f"{', '.join(track_info.artists)} - {track_info.name}"
+                    meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+                    track_name = f"{meta_sep.join(track_info.artists)} - {track_info.name}"
                     
                     # Check if file already exists BEFORE getting download info (for temp file modules like Deezer)
                     if track_info:
@@ -1134,7 +1135,8 @@ class Downloader:
         track_tags['explicit'] = ' 🅴' if track_info.explicit else ''
         
         # Add commonly used format variables
-        track_tags['artist'] = ', '.join([sanitise_name(artist) for artist in track_info.artists]) if track_info.artists else ''
+        meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+        track_tags['artist'] = meta_sep.join([sanitise_name(artist) for artist in track_info.artists]) if track_info.artists else ''
         track_tags['album_artist'] = sanitise_name(track_info.tags.album_artist) if track_info.tags.album_artist else track_tags['artist']
         
         # Add commonly used tag fields from track_info.tags
@@ -1144,7 +1146,7 @@ class Downloader:
         track_tags['label'] = sanitise_name(track_info.tags.label) if track_info.tags.label else ''
         track_tags['catalog_number'] = sanitise_name(track_info.tags.catalog_number) if track_info.tags.catalog_number else ''
         track_tags['release_date'] = track_info.tags.release_date if track_info.tags.release_date else ''
-        track_tags['genres'] = ', '.join(track_info.tags.genres) if track_info.tags.genres else ''
+        track_tags['genres'] = meta_sep.join(track_info.tags.genres) if track_info.tags.genres else ''
         
         # Add all documented format variables from GUI with default values
         track_tags['track_number'] = str(track_info.tags.track_number) if track_info.tags.track_number else ''
@@ -2108,7 +2110,9 @@ class Downloader:
             if container in tagging_supported_containers:
                 # Tag the converted file - only pass artwork_path if embed_cover is enabled
                 embed_artwork_path = artwork_path if self.global_settings['covers']['embed_cover'] else None
-                tag_file(final_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, container)
+                meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+                split_meta = self.global_settings['formatting'].get('split_metadata', True)
+                tag_file(final_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, container, metadata_separator=meta_sep, split_metadata=split_meta)
             else:
                 pass  # Skip tagging for unsupported containers like WAV
 
@@ -2128,7 +2132,9 @@ class Downloader:
             if old_track_location and old_container:
                 if old_container in tagging_supported_containers:
                     embed_artwork_path = artwork_path if self.global_settings['covers']['embed_cover'] else None
-                    tag_file(old_track_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, old_container)
+                    meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+                    split_meta = self.global_settings['formatting'].get('split_metadata', True)
+                    tag_file(old_track_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, old_container, metadata_separator=meta_sep, split_metadata=split_meta)
                 else:
                     pass  # Skip tagging for unsupported containers
             
@@ -2403,7 +2409,8 @@ class Downloader:
         # Format and display track information in a user-friendly way
         # Artists with IDs
         if track_info.artists:
-            artists_display = ', '.join(track_info.artists)
+            meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+            artists_display = meta_sep.join(track_info.artists)
             if track_info.artist_id:
                 d_print(f'Artists: {artists_display} ({track_info.artist_id})')
             else:
@@ -2776,7 +2783,9 @@ class Downloader:
             if container in tagging_supported_containers:
                 # Tag the converted file - only pass artwork_path if embed_cover is enabled
                 embed_artwork_path = artwork_path if self.global_settings['covers']['embed_cover'] else None
-                tag_file(final_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, container)
+                meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+                split_meta = self.global_settings['formatting'].get('split_metadata', True)
+                tag_file(final_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, container, metadata_separator=meta_sep, split_metadata=split_meta)
             else:
                 pass  # Skip tagging for unsupported containers like WAV
 
@@ -2794,7 +2803,9 @@ class Downloader:
             if old_track_location and old_container:
                 if old_container in tagging_supported_containers:
                     embed_artwork_path = artwork_path if self.global_settings['covers']['embed_cover'] else None
-                    tag_file(old_track_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, old_container)
+                    meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+                    split_meta = self.global_settings['formatting'].get('split_metadata', True)
+                    tag_file(old_track_location, embed_artwork_path, track_info, credits_list, embedded_lyrics, old_container, metadata_separator=meta_sep, split_metadata=split_meta)
                 else:
                     pass  # Skip tagging for unsupported containers
             
