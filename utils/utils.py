@@ -60,7 +60,7 @@ def create_aiohttp_session():
         trust_env=True
     )
 
-sanitise_name = lambda name: re.sub(r'[:]', ' - ', re.sub(r'[\\/*?"<>|$]', '', re.sub(r'[\x00-\x1F\x7F]', '', str(name).strip()))) if name else ''
+sanitise_name = lambda name: re.sub(r'[:]', ' - ', re.sub(r'[\\/*?"<>|$]', '', re.sub(r'[\x00-\x1F\x7F]', '', (", ".join(map(str, name)) if isinstance(name, list) else str(name)).strip()))) if name else ''
 
 
 def fix_byte_limit(path: str, byte_limit=250):

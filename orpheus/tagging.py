@@ -88,7 +88,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         tagger.tags.RegisterTXXXKey('upc', 'BARCODE')
 
         tagger.tags.pop('encoded', None)
-    elif container == ContainerEnum.m4a:
+    elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
         tagger = EasyMP4(file_path)
 
         # Register ISRC, lyrics, cover and explicit tags
@@ -118,14 +118,23 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
 
     tagger['title'] = track_info.name
     if track_info.album: tagger['album'] = track_info.album
-    if track_info.tags.album_artist: tagger['albumartist'] = track_info.tags.album_artist
+    if track_info.tags.album_artist:
+        album_artist_display = track_info.tags.album_artist
+        if isinstance(album_artist_display, list):
+            album_artist_display = album_artist_display[0] if album_artist_display else ""
+        
+        if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.opus, ContainerEnum.webm}:
+            # Use standard all-caps Vorbis comment for album artist
+            tagger['ALBUMARTIST'] = album_artist_display
+        else:
+            tagger['albumartist'] = album_artist_display
 
     if split_metadata:
         tagger['artist'] = track_info.artists if isinstance(track_info.artists, list) else [track_info.artists]
     else:
         tagger['artist'] = metadata_separator.join(track_info.artists) if isinstance(track_info.artists, list) else track_info.artists
 
-    if container == ContainerEnum.m4a or container == ContainerEnum.mp3:
+    if container == ContainerEnum.m4a or container == ContainerEnum.mp4 or container == ContainerEnum.mp3:
         if track_info.tags.track_number and track_info.tags.total_tracks:
             tagger['tracknumber'] = str(track_info.tags.track_number) + '/' + str(track_info.tags.total_tracks)
         elif track_info.tags.track_number:
@@ -157,7 +166,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
     if track_info.tags.copyright:tagger['copyright'] = track_info.tags.copyright
 
     if track_info.explicit is not None:
-        if container == ContainerEnum.m4a:
+        if container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             tagger['explicit'] = b'\x01' if track_info.explicit else b'\x02'
         elif container == ContainerEnum.mp3:
             tagger['Rating'] = 'Explicit' if track_info.explicit else 'Clean'
@@ -170,24 +179,24 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         else:
             tagger['genre'] = metadata_separator.join(track_info.tags.genres) if isinstance(track_info.tags.genres, list) else track_info.tags.genres
     if track_info.tags.isrc:
-        if container == ContainerEnum.m4a:
+        if container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             tagger['isrc'] = track_info.tags.isrc.encode()
-        elif container in {ContainerEnum.ogg, ContainerEnum.flac, ContainerEnum.opus}:
+        elif container in {ContainerEnum.ogg, ContainerEnum.flac, ContainerEnum.opus, ContainerEnum.webm}:
             tagger['ISRC'] = track_info.tags.isrc
         else:
             tagger['isrc'] = track_info.tags.isrc
             
     if track_info.tags.upc:
-        if container == ContainerEnum.m4a:
+        if container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             tagger['upc'] = track_info.tags.upc.encode()
-        elif container in {ContainerEnum.ogg, ContainerEnum.flac, ContainerEnum.opus}:
+        elif container in {ContainerEnum.ogg, ContainerEnum.flac, ContainerEnum.opus, ContainerEnum.webm}:
             tagger['UPC'] = track_info.tags.upc
         else:
             tagger['UPC'] = track_info.tags.upc
 
     # add the label tag
     if track_info.tags.label:
-        if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.webm}:
+        if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.opus, ContainerEnum.webm}:
             # Use list-style assignment for maximum VorbisComment compatibility
             # However, if it's a list, join it with separator if it's not the label itself
             tagger['LABEL'] = track_info.tags.label
@@ -198,19 +207,19 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
                 encoding=3,
                 text=track_info.tags.label
             )
-        elif container == ContainerEnum.m4a:
+        elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             # only works with MP3TAG? https://docs.mp3tag.de/mapping/
             tagger.RegisterTextKey('label', '\xa9pub')
             tagger['label'] = track_info.tags.label
 
     # add the description tag
-    if track_info.tags.description and container == ContainerEnum.m4a:
+    if track_info.tags.description and (container == ContainerEnum.m4a or container == ContainerEnum.mp4):
         tagger.RegisterTextKey('desc', 'description')
         tagger['description'] = track_info.tags.description
 
     # add comment tag
     if track_info.tags.comment:
-        if container == ContainerEnum.m4a:
+        if container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             tagger.RegisterTextKey('comment', '\xa9cmt')
             tagger['comment'] = track_info.tags.comment
         elif container == ContainerEnum.mp3:
@@ -218,14 +227,14 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
                 encoding=3,
                 lang=u'eng',
                 desc=u'',
-                text=track_info.tags.description
+                text=track_info.tags.comment
             )
 
     # add all extra_kwargs key value pairs to the (FLAC, Vorbis) file
-    if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.webm}:
+    if container in {ContainerEnum.flac, ContainerEnum.ogg, ContainerEnum.opus, ContainerEnum.webm}:
         for key, value in track_info.tags.extra_tags.items():
             tagger[key] = value
-    elif container is ContainerEnum.m4a:
+    elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
         for key, value in track_info.tags.extra_tags.items():
             # Create a new freeform atom and set the extra_tags in bytes
             tagger.RegisterTextKey(key, '----:com.apple.itunes:' + key)
@@ -240,7 +249,30 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
                 grouped_credits[credit_type] = []
             grouped_credits[credit_type].extend(credit.names)
 
-        if container == ContainerEnum.m4a:
+        # Filter out redundant 'Main Artist' credits if they overlap with album or track artist
+        if track_info.tags.album_artist or track_info.artists:
+            # Handle album_artist being either a string or a list
+            album_artist_list = track_info.tags.album_artist if isinstance(track_info.tags.album_artist, list) else [track_info.tags.album_artist] if track_info.tags.album_artist else []
+            album_artist_lowers = [a.lower() for a in album_artist_list]
+            
+            # Use lower-case artists for comparison
+            track_artist_lowers = [a.lower() for a in (track_info.artists if isinstance(track_info.artists, list) else [track_info.artists])]
+            
+            credits_to_remove = []
+            for credit_type, names in grouped_credits.items():
+                normalized_type = credit_type.replace('_', ' ').strip().lower()
+                if normalized_type in {'main artist', 'primary artist'}:
+                    credit_names_lower = [n.lower() for n in names]
+                    # Redundant if it matches the album artist exactly OR the track artist list
+                    if any(a in credit_names_lower for a in album_artist_lowers) or \
+                       credit_names_lower == track_artist_lowers or \
+                       ' & '.join(names).lower() in album_artist_lowers:
+                        credits_to_remove.append(credit_type)
+            
+            for credit_type in credits_to_remove:
+                del grouped_credits[credit_type]
+
+        if container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             for credit_type, names in grouped_credits.items():
                 tagger.RegisterTextKey(credit_type, '----:com.apple.itunes:' + credit_type)
                 if split_metadata:
@@ -276,7 +308,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         else:
             tagger['lyrics'] = embedded_lyrics
 
-    if track_info.tags.replay_gain and track_info.tags.replay_peak and container != ContainerEnum.m4a:
+    if track_info.tags.replay_gain and track_info.tags.replay_peak and container != ContainerEnum.m4a and container != ContainerEnum.mp4:
         tagger['REPLAYGAIN_TRACK_GAIN'] = str(track_info.tags.replay_gain)
         tagger['REPLAYGAIN_TRACK_PEAK'] = str(track_info.tags.replay_peak)
 
@@ -285,7 +317,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         # Always clear existing cover art first to prevent duplicates (especially for Beatport/Beatsource)
         if container == ContainerEnum.flac:
             tagger.clear_pictures()
-        elif container == ContainerEnum.m4a:
+        elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             if 'covr' in tagger:
                 del tagger['covr']
         elif container == ContainerEnum.mp3:
@@ -312,7 +344,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
                     picture.type = PictureType.COVER_FRONT
                     picture.mime = u'image/jpeg'
                     tagger.add_picture(picture)
-                elif container == ContainerEnum.m4a:
+                elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
                     tagger['covr'] = [MP4Cover(data, imageformat=MP4Cover.FORMAT_JPEG)]
                 elif container == ContainerEnum.mp3:
                     # Never access protected attributes, too bad!
@@ -350,7 +382,7 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
         if container == ContainerEnum.flac:
             # Remove all pictures from FLAC file
             tagger.clear_pictures()
-        elif container == ContainerEnum.m4a:
+        elif container == ContainerEnum.m4a or container == ContainerEnum.mp4:
             # Remove cover art from MP4/M4A file
             if 'covr' in tagger:
                 del tagger['covr']

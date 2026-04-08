@@ -1131,13 +1131,21 @@ class Downloader:
     def _create_track_location(self, album_location: str, track_info: TrackInfo, override_codec=None) -> str:
         """Create the full file path for a track. Use override_codec (e.g. from download_info.different_codec) for the file extension when the downloaded file is in a different container."""
         # Clean up track tags and add special formats
-        track_tags = {k: sanitise_name(v) for k, v in asdict(track_info).items()}
+        # Filter asdict to only include top-level strings for basic formatting, then explicitly handle complex fields
+        raw_tags = asdict(track_info)
+        track_tags = {k: sanitise_name(v) for k, v in raw_tags.items() if isinstance(v, (str, int, float, bool))}
         track_tags['explicit'] = ' 🅴' if track_info.explicit else ''
         
         # Add commonly used format variables
         meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
+        # Use meta_sep for consistent artist joining in filenames
         track_tags['artist'] = meta_sep.join([sanitise_name(artist) for artist in track_info.artists]) if track_info.artists else ''
-        track_tags['album_artist'] = sanitise_name(track_info.tags.album_artist) if track_info.tags.album_artist else track_tags['artist']
+        # Ensure album_artist is a string and falls back to joined track artist if missing
+        album_artist_val = track_info.tags.album_artist
+        if isinstance(album_artist_val, list):
+             album_artist_val = album_artist_val[0] if album_artist_val else ""
+             
+        track_tags['album_artist'] = sanitise_name(album_artist_val) if album_artist_val else track_tags['artist']
         
         # Add commonly used tag fields from track_info.tags
         track_tags['isrc'] = sanitise_name(track_info.tags.isrc) if track_info.tags.isrc else ''
@@ -1146,7 +1154,7 @@ class Downloader:
         track_tags['label'] = sanitise_name(track_info.tags.label) if track_info.tags.label else ''
         track_tags['catalog_number'] = sanitise_name(track_info.tags.catalog_number) if track_info.tags.catalog_number else ''
         track_tags['release_date'] = track_info.tags.release_date if track_info.tags.release_date else ''
-        track_tags['genres'] = meta_sep.join(track_info.tags.genres) if track_info.tags.genres else ''
+        track_tags['genres'] = meta_sep.join(map(str, track_info.tags.genres)) if track_info.tags.genres else ''
         
         # Add all documented format variables from GUI with default values
         track_tags['track_number'] = str(track_info.tags.track_number) if track_info.tags.track_number else ''
@@ -2407,14 +2415,12 @@ class Downloader:
             self.set_indent_number(indent_level + details_indent_adjustment)
         
         # Format and display track information in a user-friendly way
-        # Artists with IDs
+        # Artist display matching search results (standardized separator: , )
         if track_info.artists:
-            meta_sep = self.global_settings['formatting'].get('metadata_separator', ';')
-            artists_display = meta_sep.join(track_info.artists)
-            if track_info.artist_id:
-                d_print(f'Artists: {artists_display} ({track_info.artist_id})')
-            else:
-                d_print(f'Artists: {artists_display}')
+            # Always use a comma and space for the console output for better readability
+            artists_display = ", ".join(map(str, track_info.artists))
+            # Just show the artist list without IDs, matching user preference
+            d_print(f'Artist: {artists_display}')
         
         # Release year
         if track_info.release_year:
