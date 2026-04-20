@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 import sys
+# ============================================================================
+# Spotify Decryption Worker Mode (Bypass Core)
+# ============================================================================
+if "--spotify-decrypt-worker" in sys.argv:
+    try:
+        from modules.spotify.decrypt_worker import run_worker
+        # Find index of flag and pass following arguments
+        idx = sys.argv.index("--spotify-decrypt-worker")
+        run_worker(sys.argv[idx+1:])
+    except Exception as e:
+        import json
+        print(json.dumps({"error": str(e)}))
+    sys.exit(0)
+# ============================================================================
 if hasattr(sys.stdout, 'reconfigure'):
     sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
 
