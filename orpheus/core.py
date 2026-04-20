@@ -119,7 +119,15 @@ class Orpheus:
         self.session_storage_location = os.path.join(self.data_folder_base, 'loginstorage.bin')
 
         os.makedirs('config', exist_ok=True)
-        self.settings = json.loads(open(self.settings_location, 'r', encoding='utf-8').read()) if os.path.exists(self.settings_location) else {}
+        try:
+            if os.path.exists(self.settings_location):
+                with open(self.settings_location, "r", encoding="utf-8") as f:
+                    self.settings = json.loads(f.read())
+            else:
+                self.settings = {}
+        except (json.JSONDecodeError, FileNotFoundError):
+            logging.warning("Orpheus: settings.json was corrupted or empty. Resetting to defaults.")
+            self.settings = {}
 
         try:
             if self.settings['global']['advanced']['debug_mode']: 
@@ -349,7 +357,11 @@ class Orpheus:
         new_settings['modules'] = module_settings
 
         ## Sessions
-        sessions = pickle.load(open(self.session_storage_location, 'rb')) if os.path.exists(self.session_storage_location) else {}
+        try:
+            sessions = pickle.load(open(self.session_storage_location, 'rb')) if os.path.exists(self.session_storage_location) else {}
+        except (pickle.UnpicklingError, EOFError, AttributeError):
+            logging.warning("Orpheus: loginstorage.bin was corrupted. Resetting session storage.")
+            sessions = {}
 
         if not ('advancedmode' in sessions and 'modules' in sessions and sessions['advancedmode'] == advanced_login_mode):
             sessions = {'advancedmode': advanced_login_mode, 'modules':{}}
