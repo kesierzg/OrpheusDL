@@ -1705,6 +1705,11 @@ class Downloader:
         self.set_indent_number(2)
         skip_tracks = self.global_settings['artist_downloading']['separate_tracks_skip_downloaded']
         tracks_to_download = [i for i in artist_info.tracks if (i not in tracks_downloaded and skip_tracks) or not skip_tracks]
+        
+        # Apple Music returns "top songs" on artist endpoints, which can duplicate
+        # tracks already covered by album downloads. Keep artist mode album-only.
+        if service_name_lower == 'applemusic':
+            tracks_to_download = []
         number_of_tracks_new = len(tracks_to_download)
         
         if number_of_tracks_new > 0:

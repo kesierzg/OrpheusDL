@@ -1,6 +1,7 @@
 import base64
 import logging
 import os
+import subprocess
 import tempfile
 from dataclasses import asdict
 
@@ -67,7 +68,45 @@ def _resize_image_if_needed(image_path: str, max_size_bytes: int = 16 * 1024 * 1
         return image_path
 
 
-def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_list: list, embedded_lyrics: str, container: ContainerEnum, metadata_separator: str = ';', split_metadata: bool = True):
+def _repair_ogg_container(file_path: str) -> bool:
+    ffmpeg_bin = 'ffmpeg.exe' if os.name == 'nt' else 'ffmpeg'
+    tmp_out = file_path + '.retagfix.ogg'
+    cmd = [ffmpeg_bin, '-y', '-i', file_path, '-c', 'copy', tmp_out]
+    try:
+        proc = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        if proc.returncode != 0 or not os.path.exists(tmp_out) or os.path.getsize(tmp_out) <= 0:
+            return False
+        os.replace(tmp_out, file_path)
+        return True
+    except Exception:
+        return False
+    finally:
+        if os.path.exists(tmp_out):
+            try:
+                os.unlink(tmp_out)
+            except OSError:
+                pass
+
+
+def _ogg_tags_appear_written(file_path: str) -> bool:
+    """
+    Best-effort check to avoid false-negative OGG tagging failures.
+    Some mutagen save paths can raise header errors even though tags were
+    actually written and the file remains playable.
+    """
+    try:
+        if not os.path.exists(file_path) or os.path.getsize(file_path) <= 0:
+            return False
+        with open(file_path, 'rb') as f:
+            if f.read(4) != b'OggS':
+                return False
+        parsed = OggVorbis(file_path)
+        return parsed.tags is not None and len(parsed.tags) > 0
+    except Exception:
+        return False
+
+
+def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_list: list, embedded_lyrics: str, container: ContainerEnum, metadata_separator: str = ';', split_metadata: bool = True, _repair_retry: bool = False):
     if container == ContainerEnum.flac:
         tagger = FLAC(file_path)
     elif container == ContainerEnum.opus:
@@ -472,21 +511,60 @@ def tag_file(file_path: str, image_path: str, track_info: TrackInfo, credits_lis
     except OggVorbisHeaderError as ogg_header_error:
         # Check if it's the specific "unable to read full header" error for Ogg Vorbis
         if "unable to read full header" in str(ogg_header_error).lower():
-            logging.warning(f"Mutagen OggVorbisHeaderError ('unable to read full header') for {file_path}. Metadata might be missing or incomplete.")
-            # We don't raise TagSavingFailure here to allow the process to continue, 
-            # but we log it as a warning since the user reported missing metadata.
+            logging.warning(f"Mutagen OggVorbisHeaderError ('unable to read full header') for {file_path}.")
+            if container == ContainerEnum.ogg and _ogg_tags_appear_written(file_path):
+                logging.warning(
+                    "Ignoring OGG header warning because file remains readable and tags are present."
+                )
+                return
+            if container == ContainerEnum.ogg and not _repair_retry:
+                logging.warning("Attempting OGG remux repair before retrying metadata write.")
+                if _repair_ogg_container(file_path):
+                    return tag_file(
+                        file_path=file_path,
+                        image_path=image_path,
+                        track_info=track_info,
+                        credits_list=credits_list,
+                        embedded_lyrics=embedded_lyrics,
+                        container=container,
+                        metadata_separator=metadata_separator,
+                        split_metadata=split_metadata,
+                        _repair_retry=True
+                    )
+                if _ogg_tags_appear_written(file_path):
+                    logging.warning(
+                        "Ignoring OGG header warning after repair attempt because tags are present."
+                    )
+                    return
+            logging.error("OGG tagging failed after repair attempt.")
+            tag_text = '\n'.join((f'{k}: {v}' for k, v in asdict(track_info.tags).items() if v and k != 'credits' and k != 'lyrics'))
+            tag_text += '\n\ncredits:\n    ' + '\n    '.join(f'{credit.type}: {", ".join(credit.names)}' for credit in credits_list if credit.names) if credits_list else ''
+            tag_text += '\n\nlyrics:\n    ' + '\n    '.join(embedded_lyrics.split('\n')) if embedded_lyrics else ''
+            debug_tags_path = file_path.rsplit('.', 1)[0] + '_tags.txt'
+            open(debug_tags_path, 'w', encoding='utf-8').write(tag_text)
+            raise TagSavingFailure(
+                f"OGG header parse failed after repair attempt: {ogg_header_error}. "
+                f"Tag dump written to: {debug_tags_path}"
+            )
         else:
             # It's a different OggVorbisHeaderError, so proceed with the original fallback.
             logging.error(f"Tagging failed for {file_path} with OggVorbisHeaderError: {ogg_header_error}", exc_info=True)
             tag_text = '\n'.join((f'{k}: {v}' for k, v in asdict(track_info.tags).items() if v and k != 'credits' and k != 'lyrics'))
             tag_text += '\n\ncredits:\n    ' + '\n    '.join(f'{credit.type}: {", ".join(credit.names)}' for credit in credits_list if credit.names) if credits_list else ''
             tag_text += '\n\nlyrics:\n    ' + '\n    '.join(embedded_lyrics.split('\n')) if embedded_lyrics else ''
-            open(file_path.rsplit('.', 1)[0] + '_tags.txt', 'w', encoding='utf-8').write(tag_text)
-            raise TagSavingFailure
+            debug_tags_path = file_path.rsplit('.', 1)[0] + '_tags.txt'
+            open(debug_tags_path, 'w', encoding='utf-8').write(tag_text)
+            raise TagSavingFailure(
+                f"OggVorbis tagging failed: {ogg_header_error}. "
+                f"Tag dump written to: {debug_tags_path}"
+            )
     except Exception as e: # Catch other general exceptions from tagger.save()
         logging.error(f"Generic tagging failed for {file_path}. Error: {e}", exc_info=True) # Log the actual error
         tag_text = '\n'.join((f'{k}: {v}' for k, v in asdict(track_info.tags).items() if v and k != 'credits' and k != 'lyrics'))
         tag_text += '\n\ncredits:\n    ' + '\n    '.join(f'{credit.type}: {", ".join(credit.names)}' for credit in credits_list if credit.names) if credits_list else ''
         tag_text += '\n\nlyrics:\n    ' + '\n    '.join(embedded_lyrics.split('\n')) if embedded_lyrics else ''
-        open(file_path.rsplit('.', 1)[0] + '_tags.txt', 'w', encoding='utf-8').write(tag_text)
-        raise TagSavingFailure # Re-raise TagSavingFailure for other generic errors
+        debug_tags_path = file_path.rsplit('.', 1)[0] + '_tags.txt'
+        open(debug_tags_path, 'w', encoding='utf-8').write(tag_text)
+        raise TagSavingFailure(
+            f"Generic tagging failure: {e}. Tag dump written to: {debug_tags_path}"
+        )
