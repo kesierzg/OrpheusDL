@@ -137,13 +137,11 @@ class Orpheus:
                 logging.basicConfig(level=logging.CRITICAL)
                 # Specifically suppress common Spotify authentication messages
                 logging.getLogger('modules.spotify.spotify_api').setLevel(logging.CRITICAL)
-                logging.getLogger('librespot').setLevel(logging.CRITICAL)
                 logging.getLogger('spotify').setLevel(logging.CRITICAL)
         except KeyError:
             # Configure logging to suppress Spotify module warnings/errors even if no settings
             logging.basicConfig(level=logging.CRITICAL)
             logging.getLogger('modules.spotify.spotify_api').setLevel(logging.CRITICAL)
-            logging.getLogger('librespot').setLevel(logging.CRITICAL)
             logging.getLogger('spotify').setLevel(logging.CRITICAL)
 
         os.makedirs('extensions', exist_ok=True)
