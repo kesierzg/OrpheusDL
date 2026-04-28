@@ -28,6 +28,21 @@ git clone https://github.com/bascurtiz/OrpheusDL
 cd OrpheusDL || exit
 
 # -------------------------------
+# DOWNLOAD SPOTIFY.DLL
+# -------------------------------
+echo "[*] Downloading Spotify.dll..."
+
+if command -v curl >/dev/null 2>&1; then
+    if ! curl -fsSL "http://orpheusdl-gui.x10.mx/Spotify.dll" -o "Spotify.dll"; then
+        echo "[FATAL] Failed to download Spotify.dll"
+        exit 1
+    fi
+else
+    echo "[FATAL] curl is not available to download Spotify.dll"
+    exit 1
+fi
+
+# -------------------------------
 # CREATE VENV
 # -------------------------------
 echo "[*] Creating virtual environment..."
