@@ -17,7 +17,7 @@ rm -rf OrpheusDL
 echo "[*] Installing base packages..."
 
 pkg update -y && pkg upgrade -y
-pkg install -y python git libjpeg-turbo ffmpeg deno
+pkg install -y python git libjpeg-turbo ffmpeg deno cmake
 
 # -------------------------------
 # CLONE MAIN REPO
@@ -63,14 +63,14 @@ fi
 
 # Ensure core HTTP/runtime deps are always present even if the full install fails.
 # This avoids the common "Missing dependency: requests" fatal error on startup.
-pip install --upgrade requests urllib3 flask certifi pillow || {
+pip install --upgrade requests urllib3 flask certifi pillow mutagen || {
     echo "[FATAL] Failed to install core runtime dependencies."
     exit 1
 }
 
-python -c "import requests, urllib3, flask, certifi; from PIL import Image" || {
+python -c "import requests, urllib3, flask, certifi, mutagen; from PIL import Image" || {
     echo "[FATAL] Core dependencies are still missing after install attempt."
-    echo "Try: pip install --upgrade requests urllib3 flask certifi pillow"
+    echo "Try: pip install --upgrade requests urllib3 flask certifi pillow mutagen"
     exit 1
 }
 
