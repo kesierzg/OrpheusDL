@@ -45,38 +45,70 @@ Follow these steps to get a local copy of Orpheus up and running:
 
 ### Installation
 
-1. Open up cmd/terminal and cd into a place where you want to save Orpheus<br>
-2. `git clone https://github.com/bascurtiz/OrpheusDL && cd OrpheusDL && pip install --upgrade --ignore-installed -r requirements.txt`<br>
-   <sub>*(use pip3 on macOS)*</sub><br>
- 
-3. a.   `python orpheus.py settings refresh`<br>
-       <sub>*(use python3 on macOS)*</sub><br>
-   b.   `pip install --upgrade certifi`<br>
-       <sub>*(use python3 on macOS)*</sub><br>
+1. Open up cmd/terminal and `cd` into a place where you want to save Orpheus.
 
-4. Install modules:<br>   
+2. Clone Orpheus and install requirements:
+   ```shell
+   git clone https://github.com/bascurtiz/OrpheusDL && cd OrpheusDL && pip install --upgrade --ignore-installed -r requirements.txt
+   ```
+   <sub>*(use pip3 on macOS)*</sub>
+
+3. Refresh settings and update certifi:
+   a.
+   ```shell
+   python orpheus.py settings refresh
+   ```
+   <sub>*(use python3 on macOS)*</sub>
+
+   b.
+   ```shell
+   pip install --upgrade certifi
+   ```
+   <sub>*(use python3 on macOS)*</sub>
+
+4. Install modules:
    Apple Music:
-   `git clone https://github.com/bascurtiz/orpheusdl-applemusic modules/applemusic`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-applemusic modules/applemusic
+   ```
    Beatport:
-   `git clone https://github.com/bascurtiz/orpheusdl-beatport modules/beatport`<br>
-   Beatsource: 
-   `git clone https://github.com/bascurtiz/orpheusdl-beatsource modules/beatsource`<br>
-   Deezer: 
-   `git clone https://github.com/bascurtiz/orpheusdl-deezer modules/deezer`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-beatport modules/beatport
+   ```
+   Beatsource:
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-beatsource modules/beatsource
+   ```
+   Deezer:
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-deezer modules/deezer
+   ```
    Qobuz:
-   `git clone https://github.com/bascurtiz/orpheusdl-qobuz modules/qobuz`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-qobuz modules/qobuz
+   ```
    SoundCloud:
-   `git clone https://github.com/bascurtiz/orpheusdl-soundcloud modules/soundcloud`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-soundcloud modules/soundcloud
+   ```
    Spotify:
-   `git clone https://github.com/bascurtiz/orpheusdl-spotify modules/spotify`<br>
-   Tidal: 
-   `git clone --recurse-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-spotify modules/spotify
+   ```
+   Tidal:
+   ```shell
+   git clone --recurse-submodules https://github.com/bascurtiz/orpheusdl-tidal modules/tidal
+   ```
    YouTube:
-   `git clone https://github.com/bascurtiz/orpheusdl-youtube modules/youtube`<br>
+   ```shell
+   git clone https://github.com/bascurtiz/orpheusdl-youtube modules/youtube
+   ```
 
-5. Run Orpheus to create settings.json:<br>
-   `python orpheus.py`<br>
-    <sub>*(use python3 on macOS)*</sub><br>
+5. Run Orpheus to create `settings.json`:
+   ```shell
+   python orpheus.py
+   ```
+   <sub>*(use python3 on macOS)*</sub>
 
 [![Watch how to install](https://i.imgur.com/fgrPgeV.png)](https://youtu.be/AGsYTQuO7nk)
 
