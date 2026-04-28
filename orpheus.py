@@ -371,7 +371,19 @@ def main():
 
                     if orpheus.module_settings[service_name].url_decoding is ManualEnum.manual:
                         module = orpheus.load_module(service_name)
-                        mediamatch = module.custom_url_parse(link)
+                        try:
+                            mediamatch = module.custom_url_parse(link)
+                        except Exception as e:
+                            err_str = str(e)
+                            err_lower = err_str.lower()
+                            if service_name == 'soundcloud' and ('unauthorized (401)' in err_lower or 'invalid or expired' in err_lower):
+                                print(
+                                    f'Could not parse SoundCloud URL "{link}": '
+                                    'SoundCloud credentials are required. Please set a valid web_access_token in settings.'
+                                )
+                            else:
+                                print(f'Could not parse URL "{link}": {e}')
+                            continue
                         if service_name == 'applemusic':
                             if args.song_codec: mediamatch.extra_kwargs['song_codec'] = args.song_codec
                             if args.use_wrapper: mediamatch.extra_kwargs['use_wrapper'] = args.use_wrapper
