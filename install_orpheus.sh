@@ -4,7 +4,67 @@ set -euo pipefail
 echo "=== OrpheusDL-GUI Termux Installer (VENV) ==="
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$ROOT_DIR"
+INSTALLER_DIR="$ROOT_DIR"
+PROJECT_DIR="$ROOT_DIR"
+PROJECT_FOLDER_NAME="${PROJECT_FOLDER_NAME:-OrpheusDL}"
+REPO_ZIP_URL_MAIN="${REPO_ZIP_URL_MAIN:-https://github.com/bascurtiz/OrpheusDL-GUI/archive/refs/heads/main.zip}"
+REPO_ZIP_URL_MASTER="${REPO_ZIP_URL_MASTER:-https://github.com/bascurtiz/OrpheusDL-GUI/archive/refs/heads/master.zip}"
+TEMP_ZIP_PATH="$INSTALLER_DIR/orpheusdl-gui-latest.zip"
+TEMP_EXTRACT_DIR="$INSTALLER_DIR/.orpheusdl_extract_tmp"
+BOOTSTRAP_MODE="local"
+
+bootstrap_project_if_needed() {
+    if [ -f "$PROJECT_DIR/requirements.txt" ] && [ -f "$PROJECT_DIR/orpheus.py" ]; then
+        return 0
+    fi
+
+    PROJECT_DIR="$INSTALLER_DIR/$PROJECT_FOLDER_NAME"
+    if [ -f "$PROJECT_DIR/requirements.txt" ] && [ -f "$PROJECT_DIR/orpheus.py" ]; then
+        echo "[*] Found existing project at: $PROJECT_DIR"
+        BOOTSTRAP_MODE="existing-project-dir"
+        return 0
+    fi
+
+    BOOTSTRAP_MODE="downloaded"
+    echo ""
+    echo "=== Installer-only mode detected ==="
+    echo "[*] Project files were not found next to install_orpheus.sh."
+    echo "[*] The installer will now bootstrap OrpheusDL automatically."
+    echo "[*] Target folder: $PROJECT_DIR"
+    echo ""
+    echo "[*] Downloading OrpheusDL-GUI into: $PROJECT_DIR"
+
+    rm -rf "$TEMP_EXTRACT_DIR"
+    mkdir -p "$TEMP_EXTRACT_DIR"
+    rm -f "$TEMP_ZIP_PATH"
+
+    if ! curl -L --fail -o "$TEMP_ZIP_PATH" "$REPO_ZIP_URL_MAIN"; then
+        echo "[*] main.zip unavailable, trying master.zip..."
+        curl -L --fail -o "$TEMP_ZIP_PATH" "$REPO_ZIP_URL_MASTER"
+    fi
+
+    unzip -q "$TEMP_ZIP_PATH" -d "$TEMP_EXTRACT_DIR"
+    EXTRACTED_DIR=""
+    for candidate_dir in "$TEMP_EXTRACT_DIR"/*; do
+        if [ -d "$candidate_dir" ]; then
+            EXTRACTED_DIR="$candidate_dir"
+            break
+        fi
+    done
+
+    if [ -z "${EXTRACTED_DIR:-}" ] || [ ! -d "$EXTRACTED_DIR" ]; then
+        echo "[!] Could not detect extracted repository directory."
+        exit 1
+    fi
+
+    rm -rf "$PROJECT_DIR"
+    mv "$EXTRACTED_DIR" "$PROJECT_DIR"
+    rm -rf "$TEMP_EXTRACT_DIR"
+    rm -f "$TEMP_ZIP_PATH"
+}
+
+bootstrap_project_if_needed
+cd "$PROJECT_DIR"
 
 # -------------------------------
 # UPDATE & INSTALL BASE PACKAGES
@@ -87,8 +147,15 @@ termux-setup-storage || true
 # -------------------------------
 echo ""
 echo "=== INSTALL COMPLETE ==="
+if [ "$BOOTSTRAP_MODE" = "downloaded" ]; then
+    echo "[*] Setup mode: installer-only bootstrap (downloaded project automatically)."
+elif [ "$BOOTSTRAP_MODE" = "existing-project-dir" ]; then
+    echo "[*] Setup mode: used existing project folder at $PROJECT_DIR."
+else
+    echo "[*] Setup mode: used local project files next to install_orpheus.sh."
+fi
 echo "Run CLI:"
-echo "  cd \"$ROOT_DIR\""
+echo "  cd \"$PROJECT_DIR\""
 echo "  source venv/bin/activate"
 echo "  python orpheus.py"
 echo ""
