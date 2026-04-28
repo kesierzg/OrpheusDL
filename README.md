@@ -67,6 +67,7 @@ Follow these steps to get a local copy of Orpheus up and running:
    <sub>*(use python3 on macOS)*</sub>
 
 4. Install modules:
+
    Apple Music:
    ```shell
    git clone https://github.com/bascurtiz/orpheusdl-applemusic modules/applemusic
