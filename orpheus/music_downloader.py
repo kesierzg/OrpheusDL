@@ -2141,8 +2141,20 @@ class Downloader:
             container = container_map.get(file_extension, ContainerEnum.flac)
             
             
-            # Get embedded lyrics if available
-            embedded_lyrics = getattr(track_info, 'lyrics', None) or ''
+            # Get embedded lyrics based on settings:
+            # prefer synced lyrics when explicitly enabled, otherwise use plain lyrics.
+            lyrics_settings = self.global_settings.get('lyrics', {})
+            if lyrics_settings.get('embed_lyrics', True):
+                if lyrics_settings.get('embed_synced_lyrics', False):
+                    embedded_lyrics = (
+                        getattr(track_info, 'synced_lyrics', None)
+                        or getattr(track_info, 'lyrics', None)
+                        or ''
+                    )
+                else:
+                    embedded_lyrics = getattr(track_info, 'lyrics', None) or ''
+            else:
+                embedded_lyrics = ''
             
             # Get credits list (populated by _fetch_metadata if found)
             credits_list = getattr(track_info, 'credits_list', [])
@@ -2811,8 +2823,20 @@ class Downloader:
             container = container_map.get(file_extension, ContainerEnum.flac)
             
             
-            # Get embedded lyrics if available
-            embedded_lyrics = getattr(track_info, 'lyrics', None) or ''
+            # Get embedded lyrics based on settings:
+            # prefer synced lyrics when explicitly enabled, otherwise use plain lyrics.
+            lyrics_settings = self.global_settings.get('lyrics', {})
+            if lyrics_settings.get('embed_lyrics', True):
+                if lyrics_settings.get('embed_synced_lyrics', False):
+                    embedded_lyrics = (
+                        getattr(track_info, 'synced_lyrics', None)
+                        or getattr(track_info, 'lyrics', None)
+                        or ''
+                    )
+                else:
+                    embedded_lyrics = getattr(track_info, 'lyrics', None) or ''
+            else:
+                embedded_lyrics = ''
             
             # Get credits list (populated by _fetch_metadata if found)
             credits_list = getattr(track_info, 'credits_list', [])
