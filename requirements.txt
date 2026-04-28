@@ -1,6 +1,7 @@
 defusedxml>=0.7.1
 pycryptodomex>=3.10.1
 requests>=2.25.1
+flask>=3.0.0
 aiohttp>=3.8.0
 aiofiles>=0.8.0
 Pillow>=8.2.0
