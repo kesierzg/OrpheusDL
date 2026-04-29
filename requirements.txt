@@ -1,7 +1,6 @@
 defusedxml>=0.7.1
 pycryptodomex>=3.10.1
 requests>=2.25.1
-flask>=3.0.0
 aiohttp>=3.8.0
 aiofiles>=0.8.0
 Pillow>=8.2.0
@@ -20,8 +19,7 @@ packaging
 httpx
 async_lru==2.1.0
 pybase62
-unplayplay>=0.0.4
-votify>=0.1.0
+unplayplay>=0.0.8
 dataclass-click
 inquirerpy
 pfzy
