@@ -855,6 +855,9 @@ class Downloader:
                 logging.debug(f"Removing 'data' from extra_kwargs for {self.service_name}.get_playlist_info as it is unexpected.")
                 kwargs_for_playlist_info.pop('data', None)
 
+        if not self._ensure_can_download_or_abort('playlist', playlist_id, 'Playlist'):
+            return []
+
         try:
             playlist_info: PlaylistInfo = self.service.get_playlist_info(playlist_id, **kwargs_for_playlist_info)
         except Exception as e:
@@ -870,9 +873,6 @@ class Downloader:
 
         if not playlist_info:
             logging.warning(f"Could not retrieve playlist info for {playlist_id} from {self.service_name}. Skipping playlist.")
-            return []
-
-        if not self._ensure_can_download_or_abort('playlist', playlist_id, 'Playlist'):
             return []
 
         self.print(f'=== Downloading playlist {playlist_info.name} ({playlist_id}) ===', drop_level=1)
@@ -1289,6 +1289,9 @@ class Downloader:
         d_print = self.oprinter.oprint
         symbols = self._get_status_symbols()
 
+        if not self._ensure_can_download_or_abort('album', album_id, 'Album'):
+            return []
+
         # Get album info - use indent level 1 to match album details
         self.set_indent_number(1)
         self.print(f'Fetching data. Please wait...')
@@ -1310,8 +1313,6 @@ class Downloader:
             return []
 
         number_of_tracks = len(album_info.tracks)
-        if not self._ensure_can_download_or_abort('album', album_id, 'Album'):
-            return []
 
         path = self.path if not path else path
 
@@ -1627,6 +1628,9 @@ class Downloader:
         ):
             fetch_credited_albums_value = self.global_settings['artist_downloading']['return_credited_albums']
 
+        if not self._ensure_can_download_or_abort('artist', artist_id, 'Artist'):
+            return
+
         # Call get_artist_info based on service-specific signature requirements
         try:
             if service_name_lower in ['deezer', 'qobuz', 'soundcloud', 'tidal', 'beatport', 'beatsource']:
@@ -1659,9 +1663,6 @@ class Downloader:
                 'Service returned no data. Check credentials in Settings.',
                 'Artist', drop_level=1
             )
-            return
-
-        if not self._ensure_can_download_or_abort('artist', artist_id, 'Artist'):
             return
 
         artist_name = artist_info.name
