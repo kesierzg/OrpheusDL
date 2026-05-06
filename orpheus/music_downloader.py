@@ -326,11 +326,38 @@ class Downloader:
         """Normalized service name for error messages (e.g. 'applemusic', 'deezer')."""
         return (self.service_name or '').lower().replace(' ', '') if hasattr(self, 'service_name') and self.service_name else 'service'
 
+    def _is_spotify_librespot_mode(self):
+        """True when Spotify is configured to use Librespot (not Desktop API DLL mode)."""
+        try:
+            creds = ((self.full_settings or {}).get('credentials') or {}).get('Spotify') or {}
+            use_dll = str(creds.get("use_spotify_dll", "false")).lower() in ("true", "1", "yes")
+            return not use_dll
+        except Exception:
+            return False
+
+    def _normalize_service_error_message(self, msg):
+        """Normalize known misleading backend messages for the active service mode."""
+        service_key = self._service_key()
+        normalized = str(msg).strip()
+
+        # Librespot mode should not instruct users to configure Desktop API requirements.
+        if service_key == 'spotify' and self._is_spotify_librespot_mode():
+            lower_msg = normalized.lower()
+            if "spotify download requirements missing" in lower_msg or (
+                "spotify.dll" in lower_msg and "spotify-cookies.txt" in lower_msg
+            ):
+                return (
+                    "Spotify authentication expired or was not completed for Librespot mode. "
+                    "Complete the browser authorization prompt and retry."
+                )
+
+        return normalized
+
     def _print_info_error_and_fail(self, info_type, resource_id, exc_or_message, failed_entity, drop_level=1):
         """Print streamlined 'Could not get X info for id: service --> message' and then '=== x Entity failed ==='."""
         symbols = self._get_status_symbols()
         service_key = self._service_key()
-        msg = str(exc_or_message).strip()
+        msg = self._normalize_service_error_message(exc_or_message)
         # Avoid double prefixing
         if msg.startswith(f"{service_key} --> "):
             msg = msg[len(f"{service_key} --> "):]
@@ -900,7 +927,8 @@ class Downloader:
             if self._is_auth_or_credentials_error(e):
                 self._print_info_error_and_fail('playlist', playlist_id, e, 'Playlist', drop_level=1)
             else:
-                self.print(f'Could not get playlist info for {playlist_id}: {simplify_error_message(str(e))}', drop_level=1)
+                normalized_msg = self._normalize_service_error_message(e)
+                self.print(f'Could not get playlist info for {playlist_id}: {simplify_error_message(normalized_msg)}', drop_level=1)
                 symbols = self._get_status_symbols()
                 self.print(f'=== {symbols["error"]} Playlist failed ===', drop_level=1)
             return []
@@ -1337,7 +1365,8 @@ class Downloader:
             if self._is_auth_or_credentials_error(e):
                 self._print_info_error_and_fail('album', album_id, e, 'Album', drop_level=1)
             else:
-                self.print(f'Could not get album info for {album_id}: {simplify_error_message(str(e))}', drop_level=1)
+                normalized_msg = self._normalize_service_error_message(e)
+                self.print(f'Could not get album info for {album_id}: {simplify_error_message(normalized_msg)}', drop_level=1)
                 symbols = self._get_status_symbols()
                 self.print(f'=== {symbols["error"]} Album failed ===', drop_level=1)
             return []
@@ -1685,7 +1714,8 @@ class Downloader:
             if self._is_auth_or_credentials_error(e):
                 self._print_info_error_and_fail('artist', artist_id, e, 'Artist', drop_level=1)
             else:
-                self.print(f'Could not get artist info for {artist_id}: {self._service_key()} --> {simplify_error_message(str(e))}', drop_level=1)
+                normalized_msg = self._normalize_service_error_message(e)
+                self.print(f'Could not get artist info for {artist_id}: {self._service_key()} --> {simplify_error_message(normalized_msg)}', drop_level=1)
                 symbols = self._get_status_symbols()
                 self.print(f"=== {symbols['error']} Artist failed ===", drop_level=1)
             return
@@ -2404,7 +2434,7 @@ class Downloader:
                 # Auth/credentials errors: do not retry, show message immediately
                 if self._is_auth_or_credentials_error(e):
                     service_key = self._service_key()
-                    msg = str(e)
+                    msg = self._normalize_service_error_message(e)
                     if msg.startswith(f"{service_key} --> "):
                         msg = msg[len(f"{service_key} --> "):]
                     
@@ -2428,7 +2458,7 @@ class Downloader:
                     time.sleep(retry_delay)
                 else:
                     service_key = self._service_key()
-                    msg = str(e)
+                    msg = self._normalize_service_error_message(e)
                     if msg.startswith(f"{service_key} --> "):
                         msg = msg[len(f"{service_key} --> "):]
                         
@@ -2463,7 +2493,7 @@ class Downloader:
             )
             service_key = self._service_key()
             if is_credentials_error and service_key != 'service':
-                msg = str(track_error)
+                msg = self._normalize_service_error_message(track_error)
                 if msg.startswith(f"{service_key} --> "):
                     msg = msg[len(f"{service_key} --> "):]
                 
