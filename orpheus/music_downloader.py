@@ -393,13 +393,13 @@ class Downloader:
             raise
 
     def _get_spotify_pause_seconds(self):
-        """Get the Spotify pause duration from settings, with fallback to default"""
+        """Get the Spotify pause duration from settings (seconds; may be fractional), with fallback."""
         try:
             if hasattr(self, 'full_settings') and self.full_settings and 'modules' in self.full_settings and 'spotify' in self.full_settings['modules']:
-                return int(self.full_settings['modules']['spotify'].get('download_pause_seconds', 30))
+                return float(self.full_settings['modules']['spotify'].get('download_pause_seconds', 30))
         except (KeyError, ValueError, TypeError):
             pass
-        return 30  # Default fallback
+        return 30.0
 
     def _get_youtube_pause_seconds(self):
         """Get the YouTube pause duration from settings, with fallback to default"""
@@ -427,8 +427,15 @@ class Downloader:
         if (service_name == 'spotify' and index < number_of_tracks and 
             download_result is not None and download_result != "RATE_LIMITED" and download_result != "SKIPPED"):
             pause_seconds = self._get_spotify_pause_seconds()
-            self.print(f'Pausing {pause_seconds} seconds to prevent rate limiting...', drop_level=1)
-            time.sleep(pause_seconds)
+            if pause_seconds <= 0:
+                return False
+            jitter = pause_seconds * 0.25
+            pause_actual = random.uniform(pause_seconds - jitter, pause_seconds + jitter)
+            self.print(
+                f'Pausing {pause_actual:.0f}s (base {pause_seconds:g}s ±25%) to prevent rate limiting...',
+                drop_level=1,
+            )
+            time.sleep(pause_actual)
             return True
         return False
 
