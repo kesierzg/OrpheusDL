@@ -396,7 +396,12 @@ class Downloader:
         """Get the Spotify pause duration from settings (seconds; may be fractional), with fallback."""
         try:
             if hasattr(self, 'full_settings') and self.full_settings and 'modules' in self.full_settings and 'spotify' in self.full_settings['modules']:
-                return float(self.full_settings['modules']['spotify'].get('download_pause_seconds', 30))
+                spot = self.full_settings['modules']['spotify']
+                raw = spot.get('download_pause_seconds')
+                if raw is None or raw == '':
+                    use_dll = str(spot.get('use_spotify_dll', 'false')).lower() in ('true', '1', 'yes')
+                    return 60.0 if use_dll else 30.0
+                return float(raw)
         except (KeyError, ValueError, TypeError):
             pass
         return 30.0
