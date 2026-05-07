@@ -76,6 +76,16 @@ if ! eval "$REQ_CMD"; then
     echo "[!] Attempting to install core runtime dependencies needed for startup..."
 fi
 
+# Force the required unplayplay build to avoid stale preinstalled versions.
+echo "[*] Forcing unplayplay==0.0.9..."
+pip uninstall -y unplayplay >/dev/null 2>&1 || true
+pip install --no-cache-dir --upgrade --force-reinstall "unplayplay==0.0.9"
+UNPLAYPLAY_VERSION="$(pip show unplayplay 2>/dev/null | awk -F': ' '/^Version:/{print $2}')"
+if [ "$UNPLAYPLAY_VERSION" != "0.0.9" ]; then
+    echo "[FATAL] Expected unplayplay 0.0.9 but found '${UNPLAYPLAY_VERSION:-not installed}'."
+    exit 1
+fi
+
 # Ensure core HTTP/runtime deps are always present even if the full install fails.
 # This avoids the common "Missing dependency: requests" fatal error on startup.
 pip install --upgrade requests urllib3 flask certifi pillow mutagen || {
@@ -95,7 +105,7 @@ python -c "import requests, urllib3, flask, certifi, mutagen; from PIL import Im
 echo "[*] Installing librespot..."
 
 mkdir -p vendor/librespot
-pip install --no-deps --target vendor/librespot git+https://github.com/kokarare1212/librespot-python
+pip install --no-deps --upgrade --target vendor/librespot git+https://github.com/kokarare1212/librespot-python
 
 # -------------------------------
 # INITIAL SETUP
