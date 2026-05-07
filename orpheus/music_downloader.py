@@ -1225,6 +1225,30 @@ class Downloader:
 
         return initial
 
+    @staticmethod
+    def _compact_path_tag(value: str, max_len: int = 100) -> str:
+        """
+        Compact very long path tag values while keeping them human-readable.
+        Primarily targets long track/album names with "(feat. ...)" suffixes.
+        """
+        if not value:
+            return ''
+
+        compact = str(value)
+        # Remove bracketed feat/ft segments: "(feat. ...)" or "[ft ...]"
+        compact = re.sub(r'\s*[\(\[]\s*(?:feat|ft)\.?\s+[^)\]]*[\)\]]\s*', ' ', compact, flags=re.IGNORECASE)
+        # Remove trailing inline feat/ft segments
+        compact = re.sub(r'\s+(?:feat|ft)\.?\s+.*$', '', compact, flags=re.IGNORECASE)
+        compact = re.sub(r'\s+', ' ', compact).strip(' .-_')
+
+        if not compact:
+            compact = str(value).strip()
+
+        if len(compact) > max_len:
+            compact = compact[:max_len].rstrip(' .-_')
+
+        return compact
+
     def _create_album_location(self, path: str, album_id: str, album_info: AlbumInfo) -> str:
         # Clean up album tags and add special explicit and additional formats
         album_tags = {
@@ -1240,6 +1264,7 @@ class Downloader:
             album_tags['quality'] = ''
         album_tags['explicit'] = ' 🅴' if album_info.explicit else ''
         album_tags['artist_initials'] = self._get_artist_initials_from_name(album_info)
+        album_tags['name'] = self._compact_path_tag(album_tags.get('name', ''))
         
         # Add additional formatting tags if they exist
         aa = album_info.album_artist
@@ -1296,6 +1321,7 @@ class Downloader:
         track_tags['total_discs'] = str(track_info.tags.total_discs) if track_info.tags.total_discs else ''
         track_tags['quality'] = track_info.codec.name if track_info.codec else ''
         track_tags['artist_initials'] = self._get_artist_initials_from_name(AlbumInfo(name='', artist=track_tags['artist'], tracks=[], release_year=0))
+        track_tags['name'] = self._compact_path_tag(track_tags.get('name', ''))
 
         # Add aliases for GUI format compatibility (required by default format strings)
         track_tags['track_name'] = track_tags.get('name', track_info.name if track_info.name else '')
