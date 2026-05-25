@@ -496,6 +496,78 @@ _SHAKA_PACKAGER_NAMES = {
     'Linux': ('packager-linux-x64', 'packager-linux', 'shaka-packager'),
 }
 
+_SHAKA_PACKAGER_DOWNLOAD = {
+    'Windows': 'packager-win-x64.exe',
+    'Darwin': 'packager-osx-x64',
+    'Linux': 'packager-linux-x64',
+}
+
+
+def _shaka_packager_version_output(executable) -> str:
+    """Return combined stdout/stderr from `packager -version` / `--version`."""
+    import subprocess
+    import platform as _platform
+    from pathlib import Path
+
+    path = Path(executable)
+    if not path.is_file():
+        return ''
+    run_kwargs = {
+        'args': [str(path), '-version'],
+        'capture_output': True,
+        'text': True,
+        'timeout': 15,
+        'env': get_clean_env(),
+    }
+    if _platform.system() == 'Windows':
+        run_kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+    try:
+        result = subprocess.run(**run_kwargs)
+    except Exception:
+        try:
+            run_kwargs['args'] = [str(path), '--version']
+            result = subprocess.run(**run_kwargs)
+        except Exception:
+            return ''
+    return f"{result.stdout or ''}{result.stderr or ''}".strip()
+
+
+def ensure_shaka_packager_binary(search_root=None):
+    """Download Shaka Packager (latest) only when missing under search_root. Never replaces an existing binary."""
+    import platform as _platform
+    import urllib.request
+    import stat
+    from pathlib import Path
+
+    system = _platform.system()
+    filename = _SHAKA_PACKAGER_DOWNLOAD.get(system)
+    if not filename:
+        return None
+
+    if search_root is None:
+        roots = _shaka_packager_search_roots()
+        root = Path(roots[0]) if roots else Path.cwd()
+    else:
+        root = Path(search_root)
+
+    dest = (root / filename).resolve()
+    if dest.is_file() and dest.stat().st_size > 0:
+        return dest
+
+    url = f'https://github.com/shaka-project/shaka-packager/releases/latest/download/{filename}'
+    try:
+        print(f'[Shaka] Downloading {filename} (latest release)...')
+        urllib.request.urlretrieve(url, dest)
+        if system != 'Windows':
+            dest.chmod(dest.stat().st_mode | stat.S_IEXEC)
+        version_text = _shaka_packager_version_output(dest)
+        if version_text:
+            print(f'[Shaka] {version_text}')
+        return dest.resolve() if dest.is_file() else None
+    except Exception as exc:
+        print(f'[Shaka] WARNING: Could not download Shaka Packager: {exc}')
+        return resolve_shaka_packager()
+
 
 def _shaka_packager_search_roots():
     """Directories to search for the Shaka Packager binary (app root, bundle, cwd)."""
