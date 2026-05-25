@@ -61,6 +61,13 @@ except ModuleNotFoundError:
     SpotifyConfigError = None  # type: ignore
     SpotifyRateLimitDetectedError = None  # type: ignore
 
+try:
+    from modules.amazonmusic.interface import AmazonMusicConfigError
+except ModuleNotFoundError:
+    AmazonMusicConfigError = None  # type: ignore
+
+from utils.module_settings import format_module_config_error
+
 def setup_ffmpeg_path():
     """Setup FFmpeg path from settings.json to match GUI behavior.
     Also ensures common system paths (Homebrew, etc.) are checked."""
@@ -285,23 +292,32 @@ def main():
                             global_index += 1
                             
                     except Exception as e:
-                        err_str = str(e)
+                        err_str = format_module_config_error(modulename, e)
                         err_lower = err_str.lower()
                         if modulename_input == 'all':
                             if "user authentication is required" in err_lower or '"code":401' in err_str.replace(" ", ""):
                                 print(f"Error searching {modulename}: Authentication required (token invalid or expired).")
-                            elif err_str.startswith("Amazon Music:") or "amazon music:" in err_lower:
+                            elif (
+                                err_str.startswith("Amazon Music:")
+                                or "amazon music:" in err_lower
+                                or "amazon music is not set up" in err_lower
+                            ):
                                 print(f"Error searching {modulename}: {err_str}")
                             elif isinstance(e, PermissionError) and modulename == 'amazonmusic':
                                 print(
                                     f"Error searching {modulename}: Widevine device file (.wvd) missing or invalid. "
-                                    "Set wvd_path in settings."
+                                    "Set wvd_path in settings (modules → amazonmusic)."
                                 )
                             else:
                                 print(f"Error searching {modulename}: {err_str}")
                             continue
                         else:
-                            if err_str.startswith("Amazon Music:") or "amazon music:" in err_lower:
+                            if (
+                                err_str.startswith("Amazon Music:")
+                                or "amazon music:" in err_lower
+                                or "amazon music is not set up" in err_lower
+                                or (AmazonMusicConfigError is not None and isinstance(e, AmazonMusicConfigError))
+                            ):
                                 print(f'\n{err_str}')
                                 exit(1)
                             if isinstance(e, PermissionError) and modulename == 'amazonmusic':
@@ -489,6 +505,9 @@ if __name__ == "__main__":
         print('\n\t^C pressed - abort')
         exit()
     except Exception as e:
+        if AmazonMusicConfigError is not None and isinstance(e, AmazonMusicConfigError):
+            print(f'\n{e}')
+            exit(1)
         if SpotifyConfigError is not None and isinstance(e, SpotifyConfigError):
             print(f'\n{e}')
             exit(1)
@@ -518,9 +537,14 @@ if __name__ == "__main__":
         if err_str and "No modules are installed" in err_str:
             print(f'\n{e}')
             exit(1)
+        friendly = format_module_config_error("", e) if err_str else ""
+        if friendly and friendly != err_str:
+            print(f'\n{friendly}')
+            exit(1)
         if err_str and (
             err_str.startswith("Amazon Music:")
             or "amazon music:" in err_lower
+            or "amazon music is not set up" in err_lower
             or "shaka packager executable not found" in err_lower
         ):
             print(f'\n{e}')

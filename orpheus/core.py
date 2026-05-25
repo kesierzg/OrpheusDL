@@ -5,6 +5,7 @@ from orpheus.music_downloader import Downloader
 from utils.models import *
 from utils.utils import *
 from utils.exceptions import *
+from utils.module_settings import merge_module_settings
 
 os.environ['CURL_CA_BUNDLE'] = ''  # Hack to disable SSL errors for requests module for easier debugging
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # Make SSL warnings hidden
@@ -239,9 +240,24 @@ class Orpheus:
                 general_settings = global_settings.get('general', self.default_global_settings.get('general', {}))
                 advanced_settings = global_settings.get('advanced', self.default_global_settings.get('advanced', {}))
                 covers_settings = global_settings.get('covers', self.default_global_settings.get('covers', {}))
-                
+
+                module_info = self.module_settings[module]
+                stored_module_settings = self.settings.get('modules', {}).get(module, {})
+                module_settings = merge_module_settings(module_info, stored_module_settings)
+
+                if module == 'amazonmusic':
+                    try:
+                        from modules.amazonmusic.interface import validate_amazonmusic_setup
+                        validate_amazonmusic_setup(
+                            module_settings,
+                            self.session_storage_location,
+                            gui_mode=bool(self.gui_handlers),
+                        )
+                    except ImportError:
+                        pass
+
                 module_controller = ModuleController(
-                    module_settings = self.settings['modules'][module] if module in self.settings.get('modules', {}) else {},
+                    module_settings=module_settings,
                     data_folder = os.path.join(self.data_folder_base, 'modules', module),
                     extensions = self.extensions,
                     temporary_settings_controller = TemporarySettingsController(module, self.session_storage_location),
