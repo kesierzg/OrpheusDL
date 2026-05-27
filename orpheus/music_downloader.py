@@ -1790,7 +1790,8 @@ class Downloader:
             if track_info.tags.extra_tags is None:
                 track_info.tags.extra_tags = {}
             if number_of_tracks:
-                track_info.tags.extra_tags['_playlist_total_tracks'] = number_of_tracks
+                # Mutagen Vorbis/FLAC comment fields are string-based; storing ints can break tagger.save()
+                track_info.tags.extra_tags['_playlist_total_tracks'] = str(number_of_tracks)
             if use_playlist_position:
                 track_info.tags.track_number = track_index
                 if number_of_tracks:
