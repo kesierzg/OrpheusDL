@@ -378,6 +378,14 @@ def main():
                     continue
 
                 if link.startswith('http'):
+                    try:
+                        from utils.utils import resolve_platform_share_url
+                        expanded = resolve_platform_share_url(link)
+                        if expanded and expanded != link:
+                            print(f'Expanded share link to: {expanded}')
+                            link = expanded
+                    except Exception:
+                        pass
                     url = urlparse(link)
                     components = url.path.split('/')
 

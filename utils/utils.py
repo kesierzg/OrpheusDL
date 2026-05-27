@@ -1,6 +1,7 @@
 import pickle, requests, errno, hashlib, math, os, re, operator, asyncio
 import aiohttp
 import aiofiles
+from urllib.parse import urlparse, urlunparse
 from tqdm import tqdm as original_tqdm
 import threading
 
@@ -832,3 +833,44 @@ def locate_ffmpeg(preferred_path=None, extra_search_dirs=None):
     if found and system_path:
         return system_path
     return None
+
+
+def resolve_deezer_share_url(url: str) -> str:
+    """Expand link.deezer.com share URLs to a canonical www.deezer.com URL."""
+    if not url or not isinstance(url, str):
+        return url
+    stripped = url.strip()
+    try:
+        parsed = urlparse(stripped)
+    except Exception:
+        return url
+    host = (parsed.netloc or '').lower()
+    if host not in ('link.deezer.com', 'www.link.deezer.com'):
+        return url
+    if parsed.scheme not in ('http', 'https'):
+        return url
+    try:
+        session = create_requests_session()
+        response = session.head(stripped, allow_redirects=True, timeout=15)
+        if response.status_code >= 400:
+            response = session.get(stripped, allow_redirects=True, timeout=15)
+        response.raise_for_status()
+        final_parsed = urlparse(response.url)
+        final_host = (final_parsed.netloc or '').lower()
+        if 'deezer.com' not in final_host or final_host == 'link.deezer.com':
+            return url
+        # Drop tracking query params; keep locale + path (e.g. /en/playlist/123).
+        return urlunparse((
+            final_parsed.scheme or 'https',
+            final_parsed.netloc,
+            final_parsed.path.rstrip('/') or '/',
+            '', '', '',
+        ))
+    except Exception:
+        return url
+
+
+def resolve_platform_share_url(url: str) -> str:
+    """Resolve known platform short/share links to downloadable canonical URLs."""
+    resolved = resolve_deezer_share_url(url)
+    return resolved if resolved != url else url
