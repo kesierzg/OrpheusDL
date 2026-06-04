@@ -14,7 +14,7 @@ import platform
 import inspect
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 
-# Lazy import ffmpeg to avoid circular import issues in PyInstaller bundles
+# Lazy import ffmpeg to avoid circular import issues in PyInstaller bundles.
 ffmpeg = None
 Error = None
 
