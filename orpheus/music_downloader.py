@@ -11,6 +11,7 @@ import time
 import random
 import re
 import platform
+import inspect
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 
 # Lazy import ffmpeg to avoid circular import issues in PyInstaller bundles
@@ -625,7 +626,7 @@ class Downloader:
                     fetch_id = track_info.id
                     fetch_extra_kwargs = track_info.lyrics_extra_kwargs
                     
-                    if lyrics_module != 'default' and lyrics_module != self.service_name:
+                    if lyrics_module != 'default' and not self._same_module_name(lyrics_module, self.service_name):
                         self._metadata_print(f'Searching for lyrics on {lyrics_module}...')
                         search_results = self.search_by_tags(str(lyrics_module).lower(), track_info)
                         if search_results:
@@ -639,7 +640,10 @@ class Downloader:
                         # Guard against slow/hanging lyrics providers so download completion is not blocked.
                         lyrics_timeout_sec = 12
                         executor = ThreadPoolExecutor(max_workers=1)
-                        future = executor.submit(lyrics_service.get_track_lyrics, fetch_id, **fetch_extra_kwargs)
+                        fetch_kwargs = self._prepare_track_fetch_kwargs(
+                            fetch_id, fetch_extra_kwargs, lyrics_service.get_track_lyrics
+                        )
+                        future = executor.submit(lyrics_service.get_track_lyrics, fetch_id, **fetch_kwargs)
                         try:
                             lyrics_info = future.result(timeout=lyrics_timeout_sec)
                         except FuturesTimeoutError:
@@ -672,7 +676,10 @@ class Downloader:
                             if search_results:
                                 fetch_id = search_results[0].result_id
                                 fetch_extra_kwargs = search_results[0].extra_kwargs or {}
-                                lyrics_info = lrclib_service.get_track_lyrics(fetch_id, **fetch_extra_kwargs)
+                                fetch_kwargs = self._prepare_track_fetch_kwargs(
+                                    fetch_id, fetch_extra_kwargs, lrclib_service.get_track_lyrics
+                                )
+                                lyrics_info = lrclib_service.get_track_lyrics(fetch_id, **fetch_kwargs)
                                 if lyrics_info:
                                     track_info.lyrics = lyrics_info.embedded
                                     track_info.synced_lyrics = lyrics_info.synced
@@ -691,7 +698,7 @@ class Downloader:
                 fetch_id = track_info.id
                 fetch_extra_kwargs = track_info.credits_extra_kwargs
                 
-                if credits_module != 'default' and credits_module != self.service_name:
+                if credits_module != 'default' and not self._same_module_name(credits_module, self.service_name):
                     self.print(f'Searching for credits on {credits_module}...')
                     search_results = self.search_by_tags(str(credits_module).lower(), track_info)
                     if search_results:
@@ -703,7 +710,10 @@ class Downloader:
                 
                 if fetch_id:
                     # Store credits_list directly on track_info for tagging
-                    track_info.credits_list = credits_service.get_track_credits(fetch_id, **fetch_extra_kwargs)
+                    fetch_kwargs = self._prepare_track_fetch_kwargs(
+                        fetch_id, fetch_extra_kwargs, credits_service.get_track_credits
+                    )
+                    track_info.credits_list = credits_service.get_track_credits(fetch_id, **fetch_kwargs)
                 else:
                     track_info.credits_list = []
             except Exception as e:
@@ -711,6 +721,50 @@ class Downloader:
                 track_info.credits_list = []
         else:
             track_info.credits_list = []
+
+    @staticmethod
+    def _same_module_name(module_a, module_b) -> bool:
+        """Case-insensitive module name comparison (e.g. 'Tidal' vs 'tidal')."""
+        return str(module_a or '').strip().lower() == str(module_b or '').strip().lower()
+
+    @staticmethod
+    def _prepare_track_fetch_kwargs(fetch_id, fetch_extra_kwargs, method):
+        """Normalize search/GUI extra_kwargs for get_track_lyrics / get_track_credits."""
+        kwargs = dict(fetch_extra_kwargs or {})
+        raw_result = kwargs.pop('raw_result', None)
+        kwargs.pop('media_type', None)
+
+        try:
+            sig = inspect.signature(method)
+        except (TypeError, ValueError):
+            return kwargs
+
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+            if raw_result is not None and 'data' not in kwargs:
+                tid = str(fetch_id) if fetch_id is not None else ''
+                if tid:
+                    kwargs['data'] = {tid: raw_result}
+            return kwargs
+
+        allowed = {
+            name
+            for name, p in sig.parameters.items()
+            if name != 'self'
+            and p.kind in (
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                inspect.Parameter.KEYWORD_ONLY,
+            )
+        }
+        if raw_result is not None and 'data' in allowed:
+            data = kwargs.get('data')
+            if not isinstance(data, dict):
+                data = {}
+            tid = str(fetch_id) if fetch_id is not None else ''
+            if tid and tid not in data:
+                data = dict(data)
+                data[tid] = raw_result
+                kwargs['data'] = data
+        return {k: v for k, v in kwargs.items() if k in allowed}
 
     @staticmethod
     def _ensure_track_info_id(track_info: TrackInfo, track_id):
