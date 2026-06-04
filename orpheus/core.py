@@ -77,6 +77,7 @@ class Orpheus:
                 "embed_cover": True,
                 "main_compression": "high",
                 "main_resolution": 1400,
+                "save_original_cover_size": False,
                 "save_external": False,
                 "external_format": 'png',
                 "external_compression": "low",

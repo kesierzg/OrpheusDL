@@ -3980,9 +3980,11 @@ class Downloader:
     def _get_artwork_settings(self, module_name = None, is_external = False):
         if not module_name:
             module_name = self.service_name
+        covers = self.global_settings.get('covers', {})
+        save_original = bool(covers.get('save_original_cover_size', False))
         return {
-            'should_resize': True, # Always attempt resizing to respect the user's resolution setting
-            'resolution': self.global_settings['covers']['external_resolution'] if is_external else self.global_settings['covers']['main_resolution'],
+            'should_resize': not save_original,
+            'resolution': covers.get('external_resolution', 3000) if is_external else covers.get('main_resolution', 1400),
             'compression': self.global_settings['covers']['external_compression'] if is_external else self.global_settings['covers']['main_compression'],
             'format': self.global_settings['covers']['external_format'] if is_external else 'jpg'
         }
