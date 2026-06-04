@@ -594,6 +594,63 @@ def get_clean_env():
     return env
 
 
+def open_with_system_default(target: str) -> bool:
+    """Open a URL, file, or folder with the OS default handler.
+
+    Uses a cleaned environment on Linux/macOS frozen builds (PyInstaller/AppImage)
+    so xdg-open/open do not inherit LD_LIBRARY_PATH/DYLD_LIBRARY_PATH from the bundle,
+    which otherwise prevents the handler from starting on Wayland and X11.
+    Returns True if a launcher was invoked without raising."""
+    import platform as _platform
+    import subprocess
+
+    if not target:
+        return False
+    try:
+        if _platform.system() == 'Windows':
+            os.startfile(target)  # type: ignore[attr-defined]
+            return True
+        env = get_clean_env()
+        if _platform.system() == 'Darwin':
+            subprocess.run(['open', target], check=False, env=env)
+        else:
+            subprocess.run(['xdg-open', target], check=False, env=env)
+        return True
+    except Exception:
+        return False
+
+
+def open_url_in_browser(url: str) -> bool:
+    """Open *url* in the system default browser (alias for open_with_system_default)."""
+    return open_with_system_default(url)
+
+
+_webbrowser_open_patched = False
+
+
+def patch_webbrowser_open():
+    """Route webbrowser.open() through open_with_system_default (OAuth, vendor code, etc.)."""
+    global _webbrowser_open_patched
+    if _webbrowser_open_patched:
+        return
+    import webbrowser
+    _orig_open = webbrowser.open
+
+    def _open(url, new=0, autoraise=True):
+        if open_with_system_default(url):
+            return True
+        try:
+            return _orig_open(url, new, autoraise)
+        except Exception:
+            return False
+
+    webbrowser.open = _open
+    _webbrowser_open_patched = True
+
+
+patch_webbrowser_open()
+
+
 _SHAKA_PACKAGER_NAMES = {
     'Windows': ('packager-win-x64.exe', 'packager-win.exe', 'shaka-packager.exe'),
     'Darwin': ('packager-osx-x64', 'packager-osx', 'shaka-packager'),
