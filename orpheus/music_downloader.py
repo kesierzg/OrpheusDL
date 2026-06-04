@@ -318,6 +318,7 @@ class Downloader:
         self._download_error_log_path = None
         self._download_error_log_context = None
         self._download_error_count = 0
+        self._discography_album_path_registry = {}
 
     def _skip_existing_files_enabled(self) -> bool:
         """When True, skip tracks whose target file already exists."""
@@ -1903,6 +1904,57 @@ class Downloader:
             return False
         return os.path.normpath(nested) != os.path.normpath(base)
 
+    def _reset_discography_album_path_registry(self) -> None:
+        """Clear per-discography album folder registry (artist/label downloads)."""
+        self._discography_album_path_registry = {}
+
+    def _disambiguate_discography_album_path(
+        self,
+        album_path: str,
+        album_path_formatted_name: str,
+        base_path: str,
+        album_id: str,
+        album_info: AlbumInfo,
+    ) -> str:
+        """Use a distinct folder when multiple catalog albums share the same formatted name."""
+        registry = self._discography_album_path_registry
+        norm_key = os.path.normpath(album_path.rstrip('/\\'))
+        album_id_str = str(album_id)
+        existing_id = registry.get(norm_key)
+        if existing_id is None:
+            registry[norm_key] = album_id_str
+            return album_path
+        if existing_id == album_id_str:
+            return album_path
+
+        suffixes = []
+        if album_info and album_info.quality:
+            suffixes.append(str(album_info.quality))
+        if album_info and album_info.catalog_number:
+            suffixes.append(str(album_info.catalog_number))
+        suffixes.append(album_id_str)
+
+        for suffix in suffixes:
+            extra = sanitise_name(f' [{suffix}]')
+            candidate_name = (album_path_formatted_name + extra).strip()
+            candidate_raw = os.path.join(base_path, candidate_name)
+            candidate = fix_byte_limit(candidate_raw) + '/'
+            candidate_key = os.path.normpath(candidate.rstrip('/\\'))
+            if candidate_key == norm_key:
+                continue
+            if registry.get(candidate_key) in (None, album_id_str):
+                registry[candidate_key] = album_id_str
+                os.makedirs(candidate, exist_ok=True)
+                folder_name = os.path.basename(candidate.rstrip('/\\'))
+                self.print(
+                    f'⚠ Multiple album editions share the same name — saving to: {folder_name}',
+                    drop_level=1,
+                )
+                return candidate
+
+        registry[norm_key] = album_id_str
+        return album_path
+
     def _create_album_location(
         self,
         path: str,
@@ -1950,6 +2002,15 @@ class Downloader:
             self.print('⚠ Path too long, album folder name was truncated for filesystem safety.')
         album_path += '/'
         os.makedirs(album_path, exist_ok=True)
+
+        if use_discography_format:
+            album_path = self._disambiguate_discography_album_path(
+                album_path,
+                album_path_formatted_name,
+                path,
+                album_id,
+                album_info,
+            )
 
         return album_path
 
@@ -2650,6 +2711,7 @@ class Downloader:
         
         # Create the artist directory if it doesn't exist
         os.makedirs(artist_path, exist_ok=True)
+        self._reset_discography_album_path_registry()
 
         tracks_downloaded = []
         for index, album_item in enumerate(artist_info.albums, start=1):
@@ -2888,6 +2950,7 @@ class Downloader:
         self.print(f'Quality: {pretty_quality}')
         label_path = os.path.join(self.path, sanitise_name(label_name)) + '/'
         os.makedirs(label_path, exist_ok=True)
+        self._reset_discography_album_path_registry()
 
         tracks_downloaded = []
         for index, album_item in enumerate(label_info.albums or [], start=1):
