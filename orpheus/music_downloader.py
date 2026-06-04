@@ -1885,7 +1885,31 @@ class Downloader:
 
         return compact
 
-    def _create_album_location(self, path: str, album_id: str, album_info: AlbumInfo) -> str:
+    def _resolve_album_format_template(self, use_discography_format: bool = False) -> str:
+        formatting = self.global_settings.get('formatting', {})
+        if use_discography_format:
+            if 'discography_format' in formatting:
+                return formatting['discography_format'] or formatting.get('album_format', '{name}')
+            return '{name}'
+        return formatting.get('album_format', '{name}')
+
+    def _path_is_nested_discography_container(self, path: str) -> bool:
+        """True when albums download under an artist/label folder (not the root output path)."""
+        if not path:
+            return False
+        base = (self.path or '').rstrip('/\\')
+        nested = path.rstrip('/\\')
+        if not base or not nested:
+            return False
+        return os.path.normpath(nested) != os.path.normpath(base)
+
+    def _create_album_location(
+        self,
+        path: str,
+        album_id: str,
+        album_info: AlbumInfo,
+        use_discography_format: bool = False,
+    ) -> str:
         # Clean up album tags and add special explicit and additional formats
         album_tags = {
             k: (v if k in ('album_artist', 'tracks') else sanitise_name(v))
@@ -1914,8 +1938,8 @@ class Downloader:
         album_tags['label'] = sanitise_name(album_info.label) if album_info.label else ''
         album_tags['catalog_number'] = sanitise_name(album_info.catalog_number) if album_info.catalog_number else ''
 
-        # album_path = path + self.global_settings['formatting']['album_format'].format(**album_tags) # OLD
-        album_path_formatted_name = self.global_settings['formatting']['album_format'].format(**album_tags).strip()
+        album_format_template = self._resolve_album_format_template(use_discography_format)
+        album_path_formatted_name = album_format_template.format(**album_tags).strip()
         album_path_raw = os.path.join(path, album_path_formatted_name)
         # fix path byte limit
         album_path = fix_byte_limit(album_path_raw)
@@ -2231,10 +2255,13 @@ class Downloader:
         self._current_disc_track_totals = self._compute_disc_track_totals(album_info.tracks)
 
         path = self.path if not path else path
+        use_discography_format = self._path_is_nested_discography_container(path)
 
         if number_of_tracks > 1 or self.global_settings['formatting']['force_album_format']:
             # Creates the album_location folders
-            album_path = self._create_album_location(path, album_id, album_info)
+            album_path = self._create_album_location(
+                path, album_id, album_info, use_discography_format=use_discography_format
+            )
 
             self._init_download_error_log(album_path, 'album', album_info.name, album_id)
             catalog_exclusions = self._resolve_album_catalog_exclusions(album_info)

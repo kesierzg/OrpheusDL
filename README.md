@@ -129,6 +129,7 @@ loaded module. You'll find the configuration file here: `config/settings.json`
 
 ```json5
 {
+    "discography_format": "{name}{explicit}",
     "album_format": "{name}{explicit}",
     "playlist_format": "{name}{explicit}",
     "track_filename_format": "{track_number}. {name}",
@@ -139,6 +140,9 @@ loaded module. You'll find the configuration file here: `config/settings.json`
 ```
 
 `track_filename_format`: How tracks are formatted in albums and playlists. The relevant extension is appended to the end.
+
+`discography_format`: Folder structure for albums when downloading an artist or label discography (albums are placed
+under an artist/label folder already). Use `{name}` when `album_format` includes the artist to avoid duplicated paths.
 
 `album_format`, `playlist_format`, `artist_format`: Base directories for their respective formats - tracks and cover
 art are stored here. May have slashes in it, for instance {artist}/{album}.
@@ -159,8 +163,10 @@ uses `album_format` in the `playlist_format` folder
 `{total_tracks}`, `{disc_number}`, `{total_discs}`, `{release_date}`, `{release_year}`, `{artist_id}`, `{isrc}`,
 `{upc}`, `{explicit}`, `{copyright}`, `{codec}`, `{sample_rate}`, `{bit_depth}`.
 
+`discography_format` uses the same variables as `album_format`.
+
 `album_format` variables are `{name}`, `{id}`, `{artist}`, `{artist_id}`, `{release_year}`, `{upc}`, `{explicit}`,
-`{quality}`, `{artist_initials}`.
+`{quality}`, `{artist_initials}`, `{album_artist}`.
 
 `playlist_format` variables are `{name}`, `{creator}`, `{tracks}`, `{release_year}`, `{explicit}`, `{creator_id}`
 
