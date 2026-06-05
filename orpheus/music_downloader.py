@@ -971,6 +971,37 @@ class Downloader:
                 labels.append(label)
         return sanitise_name(' '.join(labels))
 
+    @staticmethod
+    def _derive_track_quality_label(track_info) -> str:
+        """
+        Deterministic quality string derived purely from the resolved track_info
+        (codec + bit depth + sample rate).
+
+        Used as the {quality} source for single-track downloads so the folder name is
+        identical no matter how the download was triggered (search row vs. pasted URL,
+        first download vs. re-download). The transient search "Additional" badge
+        (catalog_quality) is not always present, so relying on it produced inconsistent
+        folders (e.g. "[🅷 HI-RES]" once, then "[FLAC]" on re-download).
+        """
+        codec = getattr(track_info, 'codec', None)
+        if not codec:
+            return ''
+        info = codec_data.get(codec)
+        if info is None:
+            return codec.name
+        if info.spatial:
+            return 'ATMOS'
+        if info.lossless:
+            bit_depth = getattr(track_info, 'bit_depth', None) or 16
+            sample_rate = getattr(track_info, 'sample_rate', None) or 44.1
+            try:
+                hi_res = int(bit_depth) > 16 or float(sample_rate) > 48.0
+            except (TypeError, ValueError):
+                hi_res = False
+            if hi_res:
+                return 'HI-RES'
+        return info.pretty_name or codec.name
+
     # kwargs the GUI attaches for display/logging only — never valid module info-method args
     _DISPLAY_ONLY_KWARGS = ('catalog_quality', 'display_quality')
 
@@ -2397,12 +2428,15 @@ class Downloader:
         
         if is_single_track_download:
             format_string = self.global_settings['formatting']['single_full_path_format']
-            # For single tracks, {quality} should mirror the album folder style: prefer the
-            # catalog/search label (e.g. "[🅷 HI-RES]" / "[◗◖ ATMOS]") over the bare codec name.
+            # For single tracks, {quality} should mirror the album folder style
+            # (e.g. "[🅷 HI-RES]" / "[◗◖ ATMOS]"). Derive the label from the resolved
+            # track_info so it is deterministic across downloads; only fall back to the
+            # transient search badge when track_info can't tell us (it isn't always set
+            # on re-downloads, which previously caused "[🅷 HI-RES]" -> "[FLAC]" drift).
             catalog_quality = ''
             if isinstance(extra_kwargs, dict):
                 catalog_quality = extra_kwargs.get('catalog_quality') or extra_kwargs.get('display_quality') or ''
-            quality_source = catalog_quality or (track_info.codec.name if track_info.codec else '')
+            quality_source = self._derive_track_quality_label(track_info) or catalog_quality
             quality_label = self._quality_path_label(quality_source)
             track_tags['quality'] = f'[{quality_label}]' if quality_label else ''
         else:  # Track in album/playlist
