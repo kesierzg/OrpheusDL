@@ -1437,10 +1437,23 @@ class Downloader:
                         args.get('number_of_tracks', 0),
                     )
                     
+                    # M3U-only mode: skip audio download but record track in playlist file
+                    m3u_only = self.global_settings['playlist'].get('m3u_only', False)
+                    is_playlist_ctx = hasattr(self, 'download_mode') and self.download_mode is DownloadTypeEnum.playlist
+                    if m3u_only and is_playlist_ctx:
+                        track_location = self._create_track_location(args.get('album_location', ''), track_info, extra_kwargs=args.get('extra_kwargs', {}))
+                        m3u_path = args.get('m3u_playlist')
+                        if m3u_path:
+                            await loop.run_in_executor(None, self._add_track_m3u_playlist, m3u_path, track_info, track_location)
+                        return (index, track_name, "SKIPPED", None, None, 0, 0)
+
                     # Check if file already exists BEFORE getting download info (for temp file modules like Deezer)
                     if self._skip_existing_files_enabled() and track_info:
                         track_location = self._create_track_location(args.get('album_location', ''), track_info, extra_kwargs=args.get('extra_kwargs', {}))
                         if await loop.run_in_executor(None, os.path.isfile, track_location):
+                            m3u_path = args.get('m3u_playlist')
+                            if m3u_path:
+                                await loop.run_in_executor(None, self._add_track_m3u_playlist, m3u_path, track_info, track_location)
                             return (index, track_name, "SKIPPED", None, None, 0, 0)
                     
                     # SINGLE API CALL: Get download info once - IN THREAD POOL
@@ -1785,7 +1798,11 @@ class Downloader:
             logging.warning(f"Could not retrieve playlist info for {playlist_id} from {self.service_name}. Skipping playlist.")
             return []
 
-        self.print(f'=== Downloading playlist {playlist_info.name} ({playlist_id}) ===', drop_level=1)
+        m3u_only_mode = self.global_settings['playlist'].get('m3u_only', False)
+        if m3u_only_mode:
+            self.print(f'=== Generating M3U for playlist {playlist_info.name} ({playlist_id}) ===', drop_level=1)
+        else:
+            self.print(f'=== Downloading playlist {playlist_info.name} ({playlist_id}) ===', drop_level=1)
         self.print(f'Playlist creator: {playlist_info.creator}')
         if playlist_info.release_year: self.print(f'Playlist creation year: {playlist_info.release_year}')
         if playlist_info.duration: self.print(f'Duration: {beauty_format_seconds(playlist_info.duration)}')
@@ -3922,13 +3939,27 @@ class Downloader:
             self._download_album_files(single_album_path, album_info_for_single)
 
 
+        # M3U-only mode: generate playlist file without downloading audio
+        m3u_only = self.global_settings['playlist'].get('m3u_only', False)
+        is_playlist_ctx = hasattr(self, 'download_mode') and self.download_mode is DownloadTypeEnum.playlist
+        if m3u_only and is_playlist_ctx:
+            if m3u_playlist:
+                self._add_track_m3u_playlist(m3u_playlist, track_info, track_location)
+            if details_indent_adjustment != 0:
+                self.set_indent_number(indent_level)
+            symbols = self._get_status_symbols()
+            d_print(f'=== {symbols["skip"]} M3U only ===', drop_level=header_drop_level)
+            return return_with_blank_line("SKIPPED")
+
         if self._skip_existing_files_enabled() and os.path.exists(track_location):
             d_print(f'Track file already exists')
-            
+            if m3u_playlist:
+                self._add_track_m3u_playlist(m3u_playlist, track_info, track_location)
+
             # Restore original indent level if it was adjusted before printing completion message
             if details_indent_adjustment != 0:
                 self.set_indent_number(indent_level)
-            
+
             symbols = self._get_status_symbols()
             d_print(f'=== {symbols["skip"]} Track skipped ===', drop_level=header_drop_level)
 
