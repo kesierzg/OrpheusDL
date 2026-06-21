@@ -1829,6 +1829,48 @@ class Downloader:
         playlist_path += '/'
         os.makedirs(playlist_path, exist_ok=True)
 
+        # --- Playlist Sync ---
+        sync_mode = self.global_settings['playlist'].get('sync', False)
+        sync_remove_orphaned = self.global_settings['playlist'].get('sync_remove_orphaned', False)
+        sync_manifest_path = os.path.join(playlist_path, '.orpheus_sync.json')
+        old_manifest = {}
+        if sync_mode and os.path.isfile(sync_manifest_path):
+            try:
+                with open(sync_manifest_path, 'r', encoding='utf-8') as _f:
+                    old_manifest = json.load(_f).get('tracks', {})
+            except Exception:
+                old_manifest = {}
+
+        def _get_clean_track_id(track_id_or_info):
+            if isinstance(track_id_or_info, dict):
+                return str(track_id_or_info.get('id', ''))
+            if hasattr(track_id_or_info, 'id'):
+                return str(track_id_or_info.id)
+            return str(track_id_or_info)
+
+        if sync_mode:
+            current_id_set = {_get_clean_track_id(t) for t in playlist_info.tracks}
+            removed_ids = set(old_manifest.keys()) - current_id_set
+            if removed_ids:
+                print()
+                self.print(f'{len(removed_ids)} track(s) no longer in playlist:', drop_level=1)
+                for rid in removed_ids:
+                    rel_path = old_manifest.get(rid)
+                    if rel_path:
+                        full_path = os.path.join(playlist_path, rel_path)
+                        if sync_remove_orphaned:
+                            if os.path.isfile(full_path):
+                                os.remove(full_path)
+                                self.print(f'  Deleted: {rel_path}', drop_level=1)
+                            else:
+                                self.print(f'  Already gone: {rel_path}', drop_level=1)
+                        else:
+                            status = '(on disk)' if os.path.isfile(full_path) else '(not found on disk)'
+                            self.print(f'  {rel_path} {status}', drop_level=1)
+                    else:
+                        self.print(f'  Track {rid} removed (path unknown)', drop_level=1)
+        sync_new_entries = {}  # track_id -> relative_path, populated during download loop
+
         self._init_download_error_log(playlist_path, 'playlist', playlist_info.name, playlist_id)
         expected_playlist_tracks = playlist_info.num_tracks_from_api or playlist_info.num_tracks
         playlist_exclusions = getattr(playlist_info, 'excluded_tracks', None) or []
@@ -1971,7 +2013,7 @@ class Downloader:
                 # Download tracks concurrently
                 results = self._concurrent_download_tracks(playlist_info.tracks, download_args_list, concurrent_downloads, performance_summary_indent=0)
                 
-                # Process results - only collect rate-limited tracks for retry
+                # Process results - collect rate-limited tracks for retry and sync manifest entries
                 # (Errors are already reported by concurrent download progress monitor)
                 for index, (original_index, result, error) in enumerate(results):
                     if error and result == "RATE_LIMITED":
@@ -1988,6 +2030,15 @@ class Downloader:
                             'extra_kwargs': playlist_info.track_extra_kwargs,
                             'original_index': original_index + 1
                         })
+
+                    if sync_mode and original_index < len(playlist_info.tracks):
+                        clean_id = _get_clean_track_id(playlist_info.tracks[original_index])
+                        if isinstance(result, str) and result not in ("SKIPPED", "RATE_LIMITED") and os.path.isfile(result):
+                            sync_new_entries[clean_id] = os.path.relpath(result, playlist_path)
+                        elif result == "SKIPPED" and clean_id in old_manifest:
+                            sync_new_entries[clean_id] = old_manifest[clean_id]
+                        elif result == "SKIPPED":
+                            sync_new_entries[clean_id] = None
             else:
                 # Fallback to sequential downloads
                 for index, track_id_or_info in enumerate(playlist_info.tracks, start=1):
@@ -1996,10 +2047,10 @@ class Downloader:
                     # Only show "Pass 1" for Spotify (which has retry passes)
                     pass_indicator = " (Pass 1)" if service_name_lower == 'spotify' else ""
                     self.print(f'Track {index}/{number_of_tracks}{pass_indicator}', drop_level=1)
-                    
+
                     # Determine the actual track ID string to use for download_track
                     actual_track_id_str_for_download = track_id_or_info.id if isinstance(track_id_or_info, TrackInfo) else str(track_id_or_info)
-                    
+
                     download_result = self.download_track(
                         actual_track_id_str_for_download,
                         album_location=playlist_path,
@@ -2009,16 +2060,26 @@ class Downloader:
                         m3u_playlist=m3u_playlist_path,
                         extra_kwargs=playlist_info.track_extra_kwargs
                     )
-                    
+
+                    # Update sync manifest entry for this track
+                    if sync_mode:
+                        clean_id = _get_clean_track_id(track_id_or_info)
+                        if isinstance(download_result, str) and download_result not in ("SKIPPED", "RATE_LIMITED") and os.path.isfile(download_result):
+                            sync_new_entries[clean_id] = os.path.relpath(download_result, playlist_path)
+                        elif download_result == "SKIPPED" and clean_id in old_manifest:
+                            sync_new_entries[clean_id] = old_manifest[clean_id]
+                        elif download_result == "SKIPPED":
+                            sync_new_entries[clean_id] = None  # file exists but path unknown (first sync)
+
                     # Add pause between downloads for Spotify/YouTube to prevent rate limiting
                     # Only pause if track was actually downloaded (not skipped) and not the last track
                     if self._handle_spotify_rate_limit_pause(download_result, index, number_of_tracks, service_name_override=service_name_lower):
                         pass # Pause handled by helper
-                    elif (service_name_lower == 'youtube' and index < number_of_tracks and 
+                    elif (service_name_lower == 'youtube' and index < number_of_tracks and
                         download_result is not None and download_result != "RATE_LIMITED" and download_result != "SKIPPED"):
                         pause_seconds = self._get_youtube_pause_seconds()
                         self._sleep_with_countdown(pause_seconds, drop_level=1, with_padding=True)
-                    
+
                     if download_result == "RATE_LIMITED":
                         logging.info(f"Deferring track {actual_track_id_str_for_download} due to rate limit.")
                         rate_limited_tracks.append({
@@ -2026,11 +2087,6 @@ class Downloader:
                             'extra_kwargs': playlist_info.track_extra_kwargs,
                             'original_index': index
                         })
-                    elif m3u_playlist_path: # Add to M3U only if download didn't fail/get deferred
-                        # Need to get track_info again or ensure download_track provides location
-                        # This part needs refinement - how to get track_location if download succeeds?
-                        # For now, assume download_track handles its own M3U addition upon success if needed.
-                        pass
 
         # --- Second Pass for Rate-Limited Tracks --- 
         if rate_limited_tracks:
@@ -2072,9 +2128,17 @@ class Downloader:
                 self.print("No tracks were deferred due to rate limiting.")
                 print()  # Add blank line after message
 
+        # --- Save Sync Manifest ---
+        if sync_mode:
+            try:
+                with open(sync_manifest_path, 'w', encoding='utf-8') as _f:
+                    json.dump({'tracks': sync_new_entries}, _f, indent=2, ensure_ascii=False)
+            except Exception as _e:
+                logging.warning(f'Could not save sync manifest: {_e}')
+
         # --- Final Summary ---
         self.set_indent_number(1)
-        
+
         symbols = self._get_status_symbols()
         self.print(f'=== {symbols["success"]} Playlist completed ===', drop_level=1)
         # Add 2 empty lines after playlist completion for visual separation

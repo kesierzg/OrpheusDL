@@ -90,7 +90,9 @@ class Orpheus:
                 "save_m3u": True,
                 "paths_m3u": "absolute",
                 "extended_m3u": True,
-                "m3u_only": False
+                "m3u_only": False,
+                "sync": False,
+                "sync_remove_orphaned": False
             },
             "advanced": {
                 "advanced_login_system": False,
