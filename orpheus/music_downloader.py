@@ -3809,7 +3809,7 @@ class Downloader:
 
                 # Track info is None - might be OAuth race condition, retry after delay
                 if attempt < max_retries - 1:
-                    self.print(f'Track info not available, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})')
+                    self.print(f'[Retry {attempt + 1}/{max_retries}] Track info unavailable for {display_track_id}, retrying in {retry_delay}s...')
                     time.sleep(retry_delay)
 
             except Exception as e:
@@ -3845,7 +3845,8 @@ class Downloader:
 
                 # For other exceptions, retry if we have attempts left
                 if attempt < max_retries - 1:
-                    self.print(f'Error getting track info, retrying in {retry_delay}s... (attempt {attempt + 1}/{max_retries})')
+                    err_short = type(last_exception).__name__
+                    self.print(f'[Retry {attempt + 1}/{max_retries}] Error for {display_track_id} ({err_short}), retrying in {retry_delay}s...')
                     time.sleep(retry_delay)
                 else:
                     service_key = self._service_key()
@@ -3868,6 +3869,8 @@ class Downloader:
                     return return_with_blank_line(None)
 
         # Check if track_info is still None after all retries
+        if track_info is not None and attempt > 0:
+            self.print(f'[Retry succeeded] Got track info for {display_track_id} on attempt {attempt + 1}/{max_retries}')
         if track_info is None:
             self.print(f'Track info is None for {display_track_id}. Track may be unavailable or not found.')
             symbols = self._get_status_symbols()
